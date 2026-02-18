@@ -1,0 +1,17 @@
+# Create the virtual environment
+python -m venv venv
+
+# Activate it (Windows)
+.\venv\Scripts\activate
+
+# Upgrade pip first
+python -m pip install --upgrade pip
+
+# Install Torch (For Windows/CUDA 12.1 - standard for most modern GPUs)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Install Transformers and AWQ requirements
+pip install transformers accelerate fastapi uvicorn pydantic
+
+# Run
+python main.py
