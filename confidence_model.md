@@ -444,27 +444,7 @@ Final_Score = round((0.7 × 0.00 + 0.3 × 0.70) × 100)
 
 ---
 
-## 13. Approval and Open Questions
 
-### Team Approval
-
-This document must be reviewed and explicitly approved by all team members before Task 1.2 (Signal Implementation) begins.
-
-| Name | Role | Status | Date |
-|---|---|---|---|
-| Muhit | Confidence Engine | ⬜ Pending | — |
-| Xuhui | Confidence Engine | ⬜ Pending | — |
-| Shashwat | Backend / RAG | ⬜ Pending | — |
-| Torrin | Backend / RAG | ⬜ Pending | — |
-| Aneesh | Frontend / UI | ⬜ Pending | — |
-| Ethan | Frontend / UI | ⬜ Pending | — |
-
-### Open Questions for Team Discussion
-
-- [ ] **Claim extraction method:** Rule-based sentence splitter vs. LLM-based atomic claim extraction? LLM extraction is more accurate but adds latency. Decision needed before Task 2.1 implementation starts.
-- [ ] **Gen Confidence: mean vs. minimum:** Current formula uses mean. Should the minimum also be tracked and surfaced in the UI breakdown? Useful for flagging single uncertain spans in otherwise confident answers.
-- [ ] **Provisional normalization bounds [0.3, 0.9]:** Validate these against actual Llama-3.1-8B / Mistral-7B output on the HPC in Week 1 before they influence calibration.
-- [ ] **Tier boundary review trigger:** Review after first 25 validation pairs (mid-Sprint 4) or wait for all 50–100?
 
 ### Boeing Advisor Confirmation Needed
 
