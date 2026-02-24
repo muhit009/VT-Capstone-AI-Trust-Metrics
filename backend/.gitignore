@@ -1,2 +1,5 @@
+
+# ignore these
 venv/
 __pycache__/
+.env

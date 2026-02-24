@@ -1,13 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from models.schemas import InferenceRequest, InferenceResponse
 from services.model_service import model_executor
+from sqlalchemy.orm import Session
+from database import get_db
 
 router = APIRouter(prefix="/v1")
 
 @router.post("/predict", response_model=InferenceResponse)
-async def predict(payload: InferenceRequest):
+async def predict(payload: InferenceRequest, db: Session = Depends(get_db)):
     try:
-        return model_executor.generate(payload)
+        return model_executor.generate(payload, db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

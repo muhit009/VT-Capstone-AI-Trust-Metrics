@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
+from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from models import db_models
 from models.schemas import InferenceRequest, InferenceResponse, ConfidenceMetrics
 from models.db_models import Query, Answer, ConfidenceSignal
@@ -11,12 +11,20 @@ class ModelService:
         
         # Load tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+
+        # Create quantization config
+        quant_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True
+        )
         
         # Load model with bitsandbytes 4-bit quantization
         self.model = AutoModelForCausalLM.from_pretrained(
             model_id,
             device_map="auto",
-            load_in_4bit=True, 
+            quantization_config=quant_config, 
             torch_dtype=torch.float16,
             trust_remote_code=True
         )
@@ -34,9 +42,12 @@ class ModelService:
             "max_new_tokens": payload.max_new_tokens,
             "temperature": payload.temperature,
             "top_p": payload.top_p,
+            "repetition_penalty": payload.repetition_penalty, 
+            "no_repeat_ngram_size": payload.no_repeat_ngram_size,
             "return_dict_in_generate": True,
             "output_scores": True,
-            "do_sample": True if payload.temperature > 0 else False
+            "do_sample": True if payload.temperature > 0 else False,
+            "pad_token_id": self.tokenizer.eos_token_id
         }
 
         # Run inference

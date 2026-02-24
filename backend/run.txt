@@ -7,11 +7,13 @@ python -m venv venv
 # Upgrade pip first
 python -m pip install --upgrade pip
 
-# Install Torch (For Windows/CUDA 12.1 - standard for most modern GPUs)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# Install Transformers and AWQ requirements
-pip install transformers accelerate fastapi uvicorn pydantic
+# Install requirements
+pip install -r requirements
 
 # Run
 python main.py
+
+# Setting up database
+1. Get a postgreSQL local server and set it up.
+2. Create an .env with the necessary db info
+3. Run init_db.py
