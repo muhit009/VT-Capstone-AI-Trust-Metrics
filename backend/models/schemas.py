@@ -3,7 +3,7 @@ from typing import List, Optional, Dict, Any
 
 class InferenceRequest(BaseModel):
     prompt: str = Field(..., example="Explain quantum computing in one sentence.")
-    max_new_tokens: Optional[int] = 128
+    max_new_tokens: Optional[int] = 1024
     temperature: Optional[float] = 0.7
     top_p: Optional[float] = 0.9
 
