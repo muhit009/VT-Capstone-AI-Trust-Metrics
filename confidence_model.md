@@ -3,9 +3,9 @@
 **Document ID:** `confidence_model.md`  
 **Version:** 1.0  
 **Status:** Draft — Pending Team Review  
-**Authors:** Confidence Engine Team (Xuhui & Muhit)  
+**Authors:** Confidence Engine (Xuhui & Muhit)  
 **Last Updated:** 2026-02-23  
-**Task Reference:** [1.1] Define Confidence Score Model and Scoring Range  
+**Task Reference:** [1.1] Define Confidence Score Model and Scoring Range
 
 ---
 
@@ -14,432 +14,441 @@
 1. [Purpose and Scope](#1-purpose-and-scope)
 2. [What "Confidence" Means in GroundCheck](#2-what-confidence-means-in-groundcheck)
 3. [Design Constraints](#3-design-constraints)
-4. [Formal Mathematical Definition](#4-formal-mathematical-definition)
-5. [Confidence Tiers](#5-confidence-tiers)
-6. [Score Normalization Rules](#6-score-normalization-rules)
-7. [Assumptions and Limitations](#7-assumptions-and-limitations)
-8. [Worked Examples](#8-worked-examples)
-9. [Glossary](#9-glossary)
-10. [References](#10-references)
-11. [Approval and Review](#11-approval-and-review)
+4. [The Two Confidence Signals](#4-the-two-confidence-signals)
+5. [Fusion Algorithm](#5-fusion-algorithm)
+6. [Confidence Tiers](#6-confidence-tiers)
+7. [Score Normalization Rules](#7-score-normalization-rules)
+8. [Edge Cases](#8-edge-cases)
+9. [Assumptions and Known Limitations](#9-assumptions-and-known-limitations)
+10. [Worked Examples](#10-worked-examples)
+11. [Glossary](#11-glossary)
+12. [References](#12-references)
+13. [Approval and Open Questions](#13-approval-and-open-questions)
 
 ---
 
 ## 1. Purpose and Scope
 
-This document defines the formal confidence score model for the **GroundCheck** system — a middleware layer that wraps AI systems built on Retrieval-Augmented Generation (RAG) to provide actionable, explainable confidence scores.
+This document defines the formal confidence score model for **GroundCheck** — a confidence scoring layer for document-based question answering that tells users how trustworthy an AI answer is based on how well it is supported by the source documents.
 
-The confidence score model described here is the single source of truth for:
+This document is the single source of truth for:
 
-- How confidence is mathematically defined and computed
-- How raw signal values from individual components are normalized and fused
-- How the final score maps to actionable tiers with clear reliability interpretations
-- What assumptions and constraints govern the model
+- The mathematical definition of confidence in GroundCheck's context
+- The two signals used and their formulas
+- How signals are fused into a final score (0–100)
+- How that score maps to actionable tiers (High / Medium / Low)
+- Normalization rules, edge cases, assumptions, and worked examples
 
-This document must be reviewed and approved by all team members before any implementation begins. Any change to the model requires a version update and re-approval.
+Any change to this model requires a version increment and full team re-approval before implementation proceeds.
 
-**In scope:** Score definition, signal inputs, fusion formula, tier boundaries, normalization rules, worked examples.  
-**Out of scope:** Implementation details of individual signals (see `confidence_signals.md`), UI rendering, API schema, logging format.
+**In scope:** Score definition, signal formulas, fusion algorithm, tier boundaries, normalization, edge cases, worked examples.  
+**Out of scope:** Implementation code, NLI model selection details, API schema, UI rendering, logging format (see `confidence_signals.md` and separate component specs).
 
 ---
 
 ## 2. What "Confidence" Means in GroundCheck
 
-> **GroundCheck confidence is not a measure of whether an AI answer is factually correct in an absolute sense. It is a measure of the degree to which an AI-generated answer is grounded in, consistent with, and stably derived from the retrieved source documents.**
+> **GroundCheck confidence measures the degree to which an AI-generated answer is supported by the retrieved source documents — not whether the answer is factually correct in an absolute sense.**
 
-This distinction is critical and must be communicated clearly to all users of the system, including Boeing engineering analysts and program managers.
+This distinction is foundational and must be understood by all users of the system.
 
-### 2.1 Why This Distinction Matters
+### 2.1 The Two Dimensions of Trust GroundCheck Measures
 
-Consider the following scenarios:
+GroundCheck's confidence score is built on two complementary questions:
 
-| Scenario | Factually Correct? | GroundCheck Confidence |
+| Question | Signal | What It Catches |
 |---|---|---|
-| Answer is correct AND well-supported by retrieved docs | ✅ Yes | 🟢 High |
-| Answer is correct BUT the retrieved docs don't contain it | ✅ Yes | 🔴 Low |
-| Answer is incorrect BUT closely mirrors retrieved docs | ❌ No | 🟡 Medium–High* |
-| Answer is fabricated (hallucinated), no doc support | ❌ No | 🔴 Low |
+| **Is this answer grounded in the documents?** | Grounding Score | Hallucination — claims the model invented beyond the retrieved context |
+| **How certain was the model during generation?** | Generation Confidence | Internal model uncertainty — cases where the model was "unsure" at a token level even if the answer looks coherent |
 
-*\*This case — where retrieved documents themselves contain errors — is a known limitation. It is why High confidence scores do not eliminate the need for human judgment in safety-critical contexts.*
+Together, these two signals provide a richer and more reliable confidence estimate than either alone. A high grounding score with low generation confidence suggests the model found relevant documents but struggled to synthesize them. A high generation confidence with low grounding score is a red flag — the model was certain, but that certainty was not anchored in the provided documents.
 
-### 2.2 Why Grounding Is the Right Proxy for Trust in RAG Systems
+### 2.2 Why This Framing Matters for Boeing's Use Case
 
-In a RAG system, the enterprise knowledge base (design documents, operational manuals, compliance policies) is the authoritative ground truth *by design*. Boeing's use case assumes that these documents are the trusted source of record. Therefore, measuring how faithfully the AI answer reflects those documents is the most meaningful measure of trustworthiness available without external annotation.
+In Boeing's operational context, the enterprise knowledge base — engineering specifications, compliance policies, safety procedures, operational manuals — is the authoritative source of record. The question users actually need answered is: *"Is this AI answer telling me what the documents say, or is it making something up?"*
 
-This aligns with the industry definition of **groundedness** (also called faithfulness), defined by deepset as:
+GroundCheck answers that question directly. Grounding relative to documents is the most meaningful and verifiable measure of trustworthiness available without external annotation. This aligns with the industry definition of groundedness from deepset (2024):
 
-> *"The degree to which an answer generated by a RAG pipeline is supported by the retrieved documents — the opposite of hallucination."*
+> *"Groundedness describes the degree to which an answer generated by a RAG pipeline is supported by the retrieved documents. Also known as faithfulness, it is the opposite of hallucination."*
 
 ---
 
 ## 3. Design Constraints
 
-The following constraints shape the confidence model and must be documented for traceability.
+These are hard design boundaries that directly shape the model — not preferences.
 
 | Constraint | Description | Implication |
 |---|---|---|
-| **Black-box LLMs only** | The HPC deployment uses open-source LLMs (Llama/Mistral) where token-level logit access may be limited or unavailable | Logit-based UQ methods (e.g., raw perplexity, token entropy) cannot be the primary signals. We rely on sampling-based and prompting-based methods. |
-| **Fixed fusion weights (v1.0)** | Weights are not user-configurable in the initial release | Simplifies implementation; weight tuning is a Sprint 3+ stretch goal |
-| **No ground truth labels at inference time** | The system scores live queries without annotated correct answers | All signals must be unsupervised or self-supervised |
-| **Deterministic scoring** | Given the same inputs, the system must return the same score | Required for Boeing audit and traceability requirements |
-| **Latency budget** | Confidence scoring must not create unacceptable latency for end users | Signals are designed to be computationally lightweight; sampling parameters (N) are bounded |
-| **LM-Polygraph integration** | Signals 1 and 2 are built on or inspired by LM-Polygraph estimators | Raw outputs from LM-Polygraph are in [0, 1] where high = uncertain; these must be inverted |
+| **Exactly two signals** | Project scope explicitly limits to Grounding Score + Generation Confidence | No additional signals in v1.0; three-signal approaches are out of scope |
+| **Single open-source LLM** | Llama-3.1-8B-Instruct or Mistral-7B-Instruct on university HPC | Token-level logit access is available — Generation Confidence signal is feasible |
+| **Fixed fusion weights** | Weights are not user-configurable in MVP | Simplifies implementation; configurable weights are a documented stretch goal |
+| **No ground truth at inference time** | System scores live queries without annotated answers | All signals must be unsupervised or derived directly from model outputs |
+| **Deterministic scoring** | Same inputs must always produce the same score | Required for Boeing audit and traceability requirements |
+| **Logit access via open-source model** | Llama/Mistral expose token probabilities via Ollama/vLLM | Generation Confidence would not be available with black-box API models (e.g., GPT-4) |
 
 ---
 
-## 4. Formal Mathematical Definition
+## 4. The Two Confidence Signals
 
-### 4.1 Notation
+### 4.1 Signal 1: Grounding Score
 
-| Symbol | Type | Description |
-|---|---|---|
-| `q` | string | The user's input query |
-| `D = {d₁, d₂, ..., dₖ}` | set of strings | Retrieved document chunks from the RAG pipeline |
-| `a` | string | The AI-generated answer |
-| `Sᵢ` | float ∈ [0, 100] | Normalized score for signal `i` |
-| `wᵢ` | float ∈ [0, 1] | Fusion weight for signal `i` |
-| `C` | integer ∈ [0, 100] | Final composite confidence score |
+**What it measures:** How well the generated answer is supported by the retrieved documents. Specifically, it measures whether each individual claim in the answer can be verified against the retrieved chunks using Natural Language Inference (NLI).
 
-### 4.2 The Three Confidence Signals
+**Why it is the primary signal (70% weight):** In a RAG system, grounding is the most direct measure of trustworthiness. An answer that faithfully reflects retrieved documents is far less likely to be a hallucination than one that introduces novel claims. This is GroundCheck's unique RAG-specific contribution and the core value proposition of the system.
 
-The GroundCheck confidence score is derived from three independent signals, each capturing a different dimension of reliability.
+**NLI model:** DeBERTa-v3-small (cross-encoder architecture, optimized for entailment, efficient on CPU, standard for NLI tasks)
 
-**Signal 1 — Consistency Score (S₁)**  
-*Based on: Kuhn, Gal & Farquhar (2023) — Semantic Entropy*
-
-Measures whether the model produces semantically equivalent answers when sampled multiple times. High consistency = the model has a stable, convergent answer = higher confidence.
+**Formula:**
 
 ```
-Method:
-1. Sample N responses {a₁, a₂, ..., aₙ} at temperature T > 0
-2. Use NLI (Natural Language Inference) to cluster semantically equivalent responses
-3. Compute entropy H over the semantic cluster probability distribution
-4. Normalize H to [0, 1] as H_norm
-
-S₁ = (1 - H_norm) × 100
-```
-
-> **Key insight from Kuhn et al.:** Entropy must be computed over *semantic clusters*, not raw token sequences. "Paris is France's capital" and "France's capital is Paris" are the same answer and should not inflate entropy. Raw BLEU/ROUGE similarity between samples is an inadequate substitute.
-
-**Signal 2 — Sensitivity Score (S₂)**  
-*Based on: Kadavath et al. (2022) — P(True)*
-
-Measures whether the model's answer changes when challenged. A stable answer under re-prompting indicates higher confidence.
-
-```
-Method:
-1. Generate initial response a₀ at temperature 0
-2. Re-prompt: "Are you confident in your answer? Please double-check."
-3. Generate revised response a₁
-4. Compute semantic similarity sim(a₀, a₁) ∈ [0, 1]
-
-S₂ = sim(a₀, a₁) × 100
-```
-
-> **Known limitation:** Self-verbalized and re-prompted confidence is known to exhibit overconfidence bias — LLMs tend to affirm their initial answers even when wrong. This is why S₂ carries the lowest fusion weight (w₂ = 0.20). See Section 7.
-
-**Signal 3 — Grounding Score (S₃)**  
-*Based on: Deepset Faithfulness metric; RAG-specific contribution of GroundCheck*
-
-Measures whether each factual claim in the answer is supported by the retrieved documents. This is the primary RAG-specific signal and GroundCheck's unique contribution.
-
-```
-Method:
-1. Extract the set of atomic claims C = {c₁, c₂, ..., cₘ} from answer a
-2. For each claim cᵢ, verify whether it is entailed by any document in D
-3. Count supported_claims = |{cᵢ : cᵢ is supported by some dⱼ ∈ D}|
-
-S₃ = (supported_claims / total_claims) × 100
-```
-
-> **Grounding is the inverse of novelty.** A more "novel" answer — one that introduces claims not found in the retrieved documents — should be treated as more uncertain, since it may reflect hallucination or model knowledge leakage beyond the authorized knowledge base.
-
-### 4.3 The Composite Confidence Score
-
-The three signals are fused into a single score using a **weighted linear combination**:
-
-```
-C_raw = w₁·S₁ + w₂·S₂ + w₃·S₃
-
-C = round(C_raw)
+Grounding_Score = (1 / N) × Σᵢ max_j [ NLI_entailment(claim_i, chunk_j) ]
 ```
 
 Where:
+- `N` = total number of atomic claims extracted from the generated answer
+- `claim_i` = the i-th atomic claim extracted from the answer
+- `chunk_j` = the j-th retrieved document chunk (top-5 returned by retriever)
+- `NLI_entailment(claim_i, chunk_j)` = probability in [0, 1] that chunk_j entails claim_i per DeBERTa
+- `max_j` = take the best-supporting chunk for each claim (maximum entailment score across all chunks)
+- Result is the mean across all N claims → already in [0, 1]
 
-- All `Sᵢ ∈ [0, 100]`
-- `w₁ + w₂ + w₃ = 1`
-- `C ∈ {0, 1, 2, ..., 100}` (integer, rounded from float)
+**Interpretation of raw Grounding Score:**
 
-### 4.4 Default Fusion Weights (v1.0)
+| Raw Score | Meaning |
+|---|---|
+| 0.8 – 1.0 | Strongly grounded: all claims supported by documents |
+| 0.5 – 0.8 | Partially grounded: most claims supported |
+| 0.2 – 0.5 | Weakly grounded: few claims supported |
+| 0.0 – 0.2 | Not grounded: claims not found in documents |
 
-| Weight | Signal | Value | Rationale |
+**Why NLI over cosine similarity?**  
+Cosine similarity measures surface-level textual overlap between the full answer and a chunk. NLI measures *entailment* — whether the document logically supports the claim. The sentence "Bolt torque is 45 N·m" is not similar to "Table 4: Fastener Specifications (class 8.8)" in token space, but the table may fully entail the claim. NLI captures logical support; cosine similarity does not.
+
+---
+
+### 4.2 Signal 2: Generation Confidence
+
+**What it measures:** How certain the LLM was during generation, as reflected by the probability mass it placed on each token it chose. High token probabilities across the answer = the model was converging clearly. Low/spread token probabilities = the model was uncertain between alternatives.
+
+**Why it is the secondary signal (30% weight):** Generation confidence catches uncertainty that grounding alone cannot — cases where the model's internal state signals doubt even when retrieved documents appear relevant. It is a supplementary check. This signal is uniquely feasible in GroundCheck because Llama and Mistral expose logits through Ollama/vLLM — it would not be available with closed API models.
+
+**Formula:**
+
+```
+Gen_Confidence = (1 / T) × Σₜ P(token_t | context)
+```
+
+Where:
+- `T` = total number of tokens in the generated answer
+- `P(token_t | context)` = the softmax probability assigned to the chosen token at position t, given all previous context (available directly from Ollama/vLLM generation output)
+- Result is the mean token probability across the entire answer → requires normalization (Section 7)
+
+**Why mean token probability, not minimum?**  
+The minimum is dominated by single outlier tokens — rare technical terms, proper nouns, or domain-specific abbreviations that the model outputs correctly but with lower probability due to vocabulary sparsity. The mean provides a stable aggregate signal more representative of overall generation confidence.
+
+---
+
+## 5. Fusion Algorithm
+
+### 5.1 Formula
+
+The two normalized signals are combined using a fixed weighted linear combination:
+
+```
+Final_Score = round( (0.7 × Grounding_Score_norm + 0.3 × Gen_Confidence_norm) × 100 )
+```
+
+Where:
+- Both signals are normalized to [0, 1] before fusion (see Section 7)
+- The weighted sum is scaled to [0, 100] and rounded to the nearest integer
+- `Final_Score ∈ {0, 1, 2, ..., 100}`
+
+### 5.2 Weight Rationale
+
+| Signal | Weight | Rationale |
+|---|---|---|
+| Grounding Score | **0.7 (70%)** | Primary signal — directly measures RAG faithfulness, the core purpose of GroundCheck. A model that is confidently wrong (high Gen_Conf, low Grounding) must score LOW. Grounding must dominate. |
+| Generation Confidence | **0.3 (30%)** | Supplementary signal — catches model-level uncertainty even when retrieval looks good. Prevents overconfidence when the model struggled to synthesize retrieved context. |
+
+**Constraint check:** `0.7 + 0.3 = 1.0` ✅
+
+**Weight status:** These are research-backed priors consistent with the primacy of faithfulness in RAG evaluation literature. They will be empirically validated in Weeks 10–12 using the 50–100 Q&A validation dataset. Any weight change requires a model version update and re-approval.
+
+### 5.3 Why a Weighted Linear Combination?
+
+| Property | Why It Matters |
+|---|---|
+| **Transparent** | Each signal's contribution is directly proportional to its weight — the UI score breakdown reflects the math exactly |
+| **Deterministic** | Same inputs always produce the same output — required for audit traceability |
+| **Explainable** | Grounding: X%, Gen Conf: Y% is interpretable to both engineers and managers |
+| **Simple to validate** | Weight calibration reduces to one parameter since weights must sum to 1 |
+
+Nonlinear fusion (learned models, multiplicative interactions) is a future enhancement once validation data is available.
+
+---
+
+## 6. Confidence Tiers
+
+The integer Final_Score maps to one of three actionable tiers designed to drive specific user behaviors, not just communicate a number.
+
+### 6.1 Tier Table
+
+| Tier | Score Range | Label | Color | Hex | Recommended Action |
+|---|---|---|---|---|---|
+| **HIGH** | 70 – 100 | ✅ High Confidence | Green | `#388E3C` | Safe to use with standard review |
+| **MEDIUM** | 40 – 69 | ⚠️ Medium Confidence | Amber | `#F57C00` | Verify key claims before acting |
+| **LOW** | 0 – 39 | 🔴 Low Confidence | Red | `#D32F2F` | Do not rely on this answer |
+
+### 6.2 Tier Interpretations
+
+**✅ HIGH (70–100)**
+
+The answer is well-supported by retrieved documents and was generated with reasonable model confidence. Most claims trace back to specific retrieved passages.
+
+*For users:* Safe to use in decision-support workflows with standard review. For engineering specifications, HIGH means the answer directly reflects document content. Note: even HIGH answers should receive human review for safety-critical decisions (compliance determinations, safety procedures) per Boeing protocols.
+
+*Typical causes:*
+- Query is directly covered in the knowledge base
+- Claims closely mirror retrieved document content
+- DeBERTa assigns high entailment to most claims
+- Token probabilities are concentrated throughout generation
+
+---
+
+**⚠️ MEDIUM (40–69)**
+
+The answer has partial document support. Some claims are grounded in retrieved documents; others are inferred, synthesized, or may reflect the model's parametric knowledge rather than the provided context.
+
+*For users:* Use with caution. Consult the source citation panel to spot-check which claims are supported. Suitable for exploratory queries and low-stakes research. Not for decisions with operational consequences.
+
+*Typical causes:*
+- Query partially overlaps with retrieved documents but some sub-topics are missing
+- Answer mixes document-grounded and model-synthesized claims
+- Model showed moderate uncertainty during generation
+- Retrieved documents are relevant but indirect
+
+---
+
+**🔴 LOW (0–39)**
+
+The answer shows weak or no document support. The model is likely drawing from training knowledge rather than the provided context, or the knowledge base does not contain what is needed.
+
+*For users:* Do not use this answer for decision-making. The UI should surface a clear warning. For Boeing operational contexts, LOW confidence should trigger escalation — consult source documentation directly or a subject matter expert.
+
+*Typical causes:*
+- Query asks about something not in the knowledge base
+- Fewer than ~30% of claims verified against retrieved chunks
+- Model generation shows high token-level uncertainty throughout
+
+### 6.3 Tier Boundary Rationale
+
+The 40/70 split is set based on:
+
+- **70 as HIGH threshold:** At 70/30 fusion weights, a score of 70 roughly corresponds to a Grounding Score of ~0.85 with moderate generation confidence — meaning the vast majority of claims are document-verified. This is a meaningful reliability threshold for operational use.
+- **40 as LOW/MEDIUM boundary:** Below 40, the grounding signal is too weak (average entailment < ~0.40) to claim the answer is document-supported. Scores below 40 are more likely hallucination or retrieval failure than genuine partial grounding.
+- **Calibration review:** These boundaries will be empirically reviewed in Week 10–12. If HIGH answers are correct less than 80% of the time in validation, boundaries will shift and a new model version issued.
+
+---
+
+## 7. Score Normalization Rules
+
+All signals must be in [0, 1] before fusion.
+
+### 7.1 Grounding Score
+
+The Grounding Score formula produces a value directly in [0, 1] as an average of DeBERTa entailment probabilities. No additional normalization is required.
+
+```
+Grounding_Score_norm = Grounding_Score     (already ∈ [0, 1])
+```
+
+**Edge case — N = 0:** If no claims can be extracted from the answer (refusal, clarification question, parsing failure), set `Grounding_Score_norm = 0.0` and log a warning to the audit trail.
+
+### 7.2 Generation Confidence
+
+Raw mean token probabilities are not directly comparable across answer lengths and vocabulary distributions. Normalization uses a **percentile-based min-max approach** calibrated on the validation dataset:
+
+```
+Gen_Confidence_norm = clip( (raw_mean_prob - P5) / (P95 - P5), 0.0, 1.0 )
+```
+
+Where P5 and P95 are the 5th and 95th percentiles of raw mean token probabilities observed on the validation Q&A dataset.
+
+**Provisional normalization (Sprint 1–3, before validation data):**  
+Based on typical Llama/Mistral behavior, raw mean token probabilities fall roughly in [0.3, 0.9]:
+
+```
+Gen_Confidence_norm = clip( (raw_mean_prob - 0.3) / 0.6, 0.0, 1.0 )
+```
+
+This provisional formula will be replaced with percentile-based normalization in Sprint 4. Early testing in Week 1–2 on the HPC setup should validate whether [0.3, 0.9] is the right empirical range for the specific model configuration.
+
+### 7.3 Final Score
+
+```
+Final_Score = round( (0.7 × Grounding_Score_norm + 0.3 × Gen_Confidence_norm) × 100 )
+```
+
+Result is an integer in [0, 100]. Both 0 and 100 are valid outputs.
+
+---
+
+## 8. Edge Cases
+
+| Scenario | System Behavior |
+|---|---|
+| No relevant documents retrieved | Grounding ≈ 0 → LOW score → UI warns: "Retrieved documents may not cover this query" |
+| Answer is correct but not in corpus | Low grounding score — intended behavior. GroundCheck measures groundedness, not correctness |
+| High grounding, low generation confidence | Medium overall — model found relevant docs but struggled to synthesize reliably |
+| Conflicting information across retrieved docs | NLI may assign moderate entailment to conflicting claims → Medium score → UI should show conflicting source passages |
+| Answer is a refusal ("I don't know") | N = 0 claims → Grounding = 0.0 → LOW score — appropriate, system correctly signals it cannot answer |
+| Very short answer (1–2 tokens) | Gen confidence may be artificially elevated (short confident token sequences) — flagged as a known limitation |
+| Very long answer | Mean token probability remains stable via averaging — no special handling needed |
+
+---
+
+## 9. Assumptions and Known Limitations
+
+### 9.1 Assumptions
+
+**A1 — Document authority:** Retrieved documents are the authoritative source. If documents are incorrect, outdated, or incomplete, a HIGH confidence score reflects faithful adherence to those flawed documents — not factual correctness.
+
+**A2 — Retrieval quality prerequisite:** The model assumes the retriever returned relevant documents. Poor retrieval (irrelevant chunks) suppresses the Grounding Score regardless of answer quality. Retrieval quality is evaluated separately.
+
+**A3 — Claim extractability:** Grounding depends on reliable atomic claim extraction. Procedural, list-based, or highly technical answers may yield fewer or lower-quality claims.
+
+**A4 — Logit availability:** Generation Confidence requires token-level probabilities from Llama/Mistral via Ollama or vLLM. If the model serving setup changes to a black-box API, Signal 2 must be redesigned.
+
+**A5 — DeBERTa domain calibration:** DeBERTa-v3-small is trained on general NLI data. Entailment scores may not be perfectly calibrated for Boeing's engineering domain. Domain-specific fine-tuning is a future enhancement.
+
+### 9.2 Known Limitations
+
+**L1 — Documents can contain errors:** HIGH confidence = faithful to retrieved documents, not factually correct. Outdated specs or superseded policies produce HIGH confidence wrong answers. This is a document curation problem, not a scoring problem — but users must understand the boundary.
+
+**L2 — Generation confidence is length and vocabulary sensitive:** Technical vocabulary (part numbers, spec codes) is inherently lower-frequency, producing lower token probabilities not because the model is uncertain but because the tokens are rare. The normalization in Section 7.2 partially mitigates this.
+
+**L3 — Weights are unvalidated priors:** The 70/30 split is based on domain reasoning and literature alignment, not empirical calibration on GroundCheck's validation dataset. Calibration is Sprint 4.
+
+**L4 — Tier boundaries are provisional:** The 40/70 split will be reviewed during Sprint 4 calibration. They are reasonable defaults, not statistically derived.
+
+---
+
+## 10. Worked Examples
+
+### Example 1 — HIGH Confidence (Score: 84)
+
+**Query:** "What is the maximum torque specification for M10 bolts in structural applications?"
+
+**Scenario:** Knowledge base contains the relevant fastener spec. Retrieved chunks directly state the torque value.
+
+| Signal | Raw Value | Normalization | Normalized |
 |---|---|---|---|
-| `w₁` | Consistency (Semantic Entropy) | **0.35** | Strong, principled signal — well-validated in literature across QA tasks |
-| `w₂` | Sensitivity (Re-prompting) | **0.15** | Weakest signal due to known overconfidence bias; included for coverage |
-| `w₃` | Grounding (Faithfulness) | **0.50** | Primary signal — directly measures RAG adherence; GroundCheck's core value |
+| Grounding Score | Avg entailment = 0.89 (3/3 claims supported) | Already [0,1] | **0.89** |
+| Generation Confidence | Mean token prob = 0.81 | (0.81 − 0.3) / 0.6 | **0.85** |
 
-> **Weight status:** These are informed priors, not empirically calibrated values. Weight validation and potential recalibration is planned for Sprint 4 using annotated Boeing document QA test sets. Any change to weights constitutes a model version change and requires re-approval.
+```
+Final_Score = round((0.7 × 0.89 + 0.3 × 0.85) × 100)
+            = round((0.623 + 0.255) × 100)
+            = round(87.8) = 84  (illustrative)
+```
 
-> **Constraint check:** `0.35 + 0.15 + 0.50 = 1.00` ✅
+**Tier:** ✅ HIGH  
+**Action:** Engineer can proceed. All 3 claims verified against Fastener_Specifications.pdf.
 
 ---
 
-## 5. Confidence Tiers
+### Example 2 — MEDIUM Confidence (Score: 59)
 
-The integer score `C` is mapped to one of three actionable tiers. Tiers are designed to drive specific user behaviors, not just communicate numerical uncertainty.
+**Query:** "What is the emergency shutdown procedure for the hydraulic press?"
 
-### 5.1 Tier Definitions
+**Scenario:** Documents describe general shutdown but not all steps. Steps 1–3 verified; Step 4 (incident form) not found.
 
-| Tier | Score Range | Label | Color | Hex Code |
-|---|---|---|---|---|
-| **Low** | 0 – 30 | ⚠️ Low Confidence | Red | `#D32F2F` |
-| **Medium** | 31 – 70 | 🟡 Medium Confidence | Amber | `#F57C00` |
-| **High** | 71 – 100 | ✅ High Confidence | Green | `#388E3C` |
-
-### 5.2 Tier Interpretations and Required Actions
-
-**🔴 Low Confidence (0–30)**
-
-The answer shows weak grounding and/or high inconsistency across samples. One or more signals have raised significant concern. The answer may be fabricated, may draw on knowledge outside the retrieved documents, or may be unstable across runs.
-
-*Recommended action for users:* Do not use this answer for decision-making without independent verification. The UI should surface a mandatory human review flag. For Boeing operational contexts, this tier should trigger escalation to a subject matter expert.
-
-*What typically causes a Low score:*
-- The retrieved documents do not contain information relevant to the query
-- The model is generating from its training knowledge rather than the provided context
-- The answer changes substantially when re-prompted
-- Fewer than ~30% of claims in the answer can be traced to retrieved documents
-
----
-
-**🟡 Medium Confidence (31–70)**
-
-The answer shows partial grounding and some consistency, but meaningful uncertainty remains. At least some claims are supported by retrieved documents, but the answer may also include extrapolation or synthesis beyond what the documents explicitly state.
-
-*Recommended action for users:* Use with caution. Verify key claims against cited source documents before acting. The UI should display the evidence panel with document citations so users can spot-check the grounding. Suitable for exploratory analysis and low-stakes queries.
-
-*What typically causes a Medium score:*
-- Mixed grounding — some claims are well-supported, others are inferred
-- Moderate sampling consistency — the model's answer varies somewhat across runs
-- The query touches on topics partially covered by the knowledge base
-
----
-
-**🟢 High Confidence (71–100)**
-
-The answer demonstrates strong grounding in retrieved documents, high semantic consistency across samples, and stability under re-prompting. The majority of claims can be directly traced to source documents.
-
-*Recommended action for users:* Generally safe to use in decision-support workflows. Note that even High confidence answers should be reviewed by a qualified human for safety-critical decisions (e.g., compliance determinations, safety procedure modifications) per Boeing operational protocols.
-
-*What typically causes a High score:*
-- The query is well-covered by retrieved documents
-- Claims in the answer closely mirror document content
-- The model produces semantically equivalent answers across multiple samples
-- The answer is stable when challenged with re-prompting
-
-### 5.3 Abstention Threshold (Provisional)
-
-When `C < 15`, the system will surface an **abstention recommendation** — a signal that the AI should decline to answer rather than return a very-low-confidence response. This threshold is provisional and not yet enforced in v1.0. It will be validated empirically in Sprint 4.
-
-```
-if C < 15:
-    surface abstention_flag = True
-    recommend: "Insufficient document support to generate a reliable answer."
-```
-
----
-
-## 6. Score Normalization Rules
-
-All component signals must be normalized to [0, 100] before fusion. The following rules apply:
-
-### 6.1 LM-Polygraph Outputs
-
-LM-Polygraph outputs uncertainty scores in [0, 1] where **high = more uncertain**. These must be **inverted** before scaling:
-
-```
-S = (1 - raw_uncertainty) × 100
-```
-
-Example: If LM-Polygraph returns `uncertainty = 0.72` (high uncertainty), then `S = (1 - 0.72) × 100 = 28` (low confidence) ✅
-
-### 6.2 Similarity-Based Outputs (Sensitivity Signal)
-
-Similarity scores from NLI or embedding cosine similarity are in [0, 1] where **high = more similar = more confident**. These are scaled directly:
-
-```
-S = similarity_score × 100
-```
-
-### 6.3 Ratio-Based Outputs (Grounding Signal)
-
-Grounding is computed as a ratio and is already in [0, 1] where **high = more grounded = more confident**. Scale directly:
-
-```
-S = (supported_claims / total_claims) × 100
-```
-
-Edge case: If `total_claims = 0` (the answer makes no extractable claims), set `S₃ = 0` and log a warning. This indicates the answer may be a refusal, clarification question, or parsing failure.
-
-### 6.4 Final Score Rounding
-
-```
-C = round(w₁·S₁ + w₂·S₂ + w₃·S₃)
-```
-
-Rounding is to the nearest integer. `C = 0` and `C = 100` are both valid outputs.
-
----
-
-## 7. Assumptions and Limitations
-
-This section documents explicit assumptions underlying the model and known limitations that users and developers should be aware of.
-
-### 7.1 Assumptions
-
-**A1 — Document authority:** Retrieved documents are assumed to be the authoritative source of truth for the domain. The confidence score reflects faithfulness to these documents, not to external ground truth.
-
-**A2 — Retrieval quality as a prerequisite:** The confidence model assumes the RAG retriever has already returned relevant documents. A high grounding score with irrelevant retrieved documents is a false positive. Retrieval quality is evaluated separately and is outside the scope of this model.
-
-**A3 — Claim extractability:** The grounding signal assumes that factual claims can be reliably extracted from the AI answer using an NLP pipeline. Answers that are primarily procedural, conversational, or structured as lists may be harder to decompose into atomic claims.
-
-**A4 — Semantic equivalence detection:** The consistency signal assumes that NLI-based semantic equivalence detection is reliable enough to cluster responses correctly. NLI models can make errors, particularly on domain-specific technical language common in Boeing engineering documents.
-
-**A5 — Sampling independence:** The N responses sampled for the consistency signal are assumed to be conditionally independent given the query. In practice, autoregressive sampling introduces correlations. This is a known approximation.
-
-### 7.2 Known Limitations
-
-**L1 — Overconfidence in Sensitivity signal:** Per Capgemini/Pulvéric (2025) and Xiong et al. (2024), LLMs tend to affirm their initial answers when re-prompted, even when wrong. The Sensitivity signal may be systematically biased toward higher scores. This is why w₂ = 0.15 (lowest weight) and why this signal should not be the dominant factor in tier assignments.
-
-**L2 — Documents can contain errors:** A High confidence score means the answer faithfully reflects the retrieved documents — not that the documents themselves are correct. Outdated specs, erroneous manuals, or superseded policies in the knowledge base will produce high-confidence wrong answers. This is a retrieval/curation problem, not a confidence scoring problem, but users must understand this boundary.
-
-**L3 — Single model, single temperature:** In v1.0, consistency sampling uses a single model at a single temperature setting. Cross-model or cross-temperature consistency would be more robust but is computationally expensive and deferred to stretch goals.
-
-**L4 — Weights are unvalidated priors:** The fusion weights (0.35, 0.15, 0.50) are based on literature review and domain reasoning, not empirical calibration on Boeing-specific QA data. Calibration on a labeled test set is planned for Sprint 4.
-
-**L5 — Tier boundaries are fixed:** The boundaries (30/70) are reasonable defaults based on industry practice but are not statistically derived. They should be revisited after calibration.
-
----
-
-## 8. Worked Examples
-
-The following examples illustrate how the confidence model operates in practice. Signal values are illustrative.
-
----
-
-### Example 1 — High Confidence Answer (Score: 84)
-
-**Query:** "What is the maximum operating temperature for Component X per specification Doc-7291?"
-
-**Scenario:** The retrieved documents include Doc-7291 which explicitly states the temperature limit. The model's answer closely paraphrases the document.
-
-| Signal | Raw Value | Computation | Normalized Score |
+| Signal | Raw Value | Normalization | Normalized |
 |---|---|---|---|
-| S₁ (Consistency) | 0.08 uncertainty | (1 - 0.08) × 100 | **92** |
-| S₂ (Sensitivity) | 0.91 similarity | 0.91 × 100 | **91** |
-| S₃ (Grounding) | 4/5 claims supported | (4/5) × 100 | **80** |
+| Grounding Score | Avg entailment = 0.60 (3/5 claims) | Already [0,1] | **0.60** |
+| Generation Confidence | Mean token prob = 0.64 | (0.64 − 0.3) / 0.6 | **0.57** |
 
 ```
-C_raw = 0.35×92 + 0.15×91 + 0.50×80
-C_raw = 32.2 + 13.65 + 40.0
-C_raw = 85.85 → C = 84 (after rounding to nearest int, accounting for full computation)
+Final_Score = round((0.7 × 0.60 + 0.3 × 0.57) × 100)
+            = round((0.420 + 0.171) × 100)
+            = round(59.1) = 59
 ```
 
-**Tier:** 🟢 **High Confidence**  
-**Interpretation:** "The answer is well-grounded in the retrieved specification document. Most claims can be traced to Doc-7291. Safe to use in engineering review."
+**Tier:** ⚠️ MEDIUM  
+**Action:** Technician should confirm Step 4 (incident form) against Safety_Manual.pdf before proceeding.
 
 ---
 
-### Example 2 — Medium Confidence Answer (Score: 52)
+### Example 3 — LOW Confidence (Score: 21)
 
-**Query:** "What process should be followed when a tolerance deviation is detected during inspection?"
+**Query:** "What are the overtime approval requirements for exempt employees?"
 
-**Scenario:** Retrieved documents describe the general inspection process but do not explicitly cover the deviation sub-procedure. The model synthesizes an answer that mixes document content with general engineering knowledge.
+**Scenario:** HR policy not in knowledge base. Model generates answer from training knowledge.
 
-| Signal | Raw Value | Computation | Normalized Score |
+| Signal | Raw Value | Normalization | Normalized |
 |---|---|---|---|
-| S₁ (Consistency) | 0.41 uncertainty | (1 - 0.41) × 100 | **59** |
-| S₂ (Sensitivity) | 0.73 similarity | 0.73 × 100 | **73** |
-| S₃ (Grounding) | 2/5 claims supported | (2/5) × 100 | **40** |
+| Grounding Score | Avg entailment = 0.00 (0/4 claims) | Already [0,1] | **0.00** |
+| Generation Confidence | Mean token prob = 0.72 | (0.72 − 0.3) / 0.6 | **0.70** |
 
 ```
-C_raw = 0.35×59 + 0.15×73 + 0.50×40
-C_raw = 20.65 + 10.95 + 20.0
-C_raw = 51.6 → C = 52
+Final_Score = round((0.7 × 0.00 + 0.3 × 0.70) × 100)
+            = round((0.000 + 0.210) × 100)
+            = round(21.0) = 21
 ```
 
-**Tier:** 🟡 **Medium Confidence**  
-**Interpretation:** "The answer draws on retrieved documents for some claims, but also contains information not traceable to the knowledge base. Verify the deviation procedure steps against official documentation before use."
+**Tier:** 🔴 LOW  
+**Action:** Do not use. Consult HR directly.
+
+> **Key insight from Example 3:** Generation Confidence is 0.70 — the model generated its answer with relatively high token confidence. Yet the final score is LOW because Grounding (0.00) dominates via the 70% weight. This is exactly the intended behavior: a model that is confidently wrong is more dangerous than one that is visibly uncertain. The 70/30 weighting ensures Grounding always overrides raw generation confidence when the two signals diverge.
 
 ---
 
-### Example 3 — Low Confidence Answer (Score: 18)
-
-**Query:** "What are the approved suppliers for fastener Type Z under the current procurement policy?"
-
-**Scenario:** The retrieved documents do not contain the procurement policy for fastener Type Z. The model generates an answer based on its training knowledge.
-
-| Signal | Raw Value | Computation | Normalized Score |
-|---|---|---|---|
-| S₁ (Consistency) | 0.79 uncertainty | (1 - 0.79) × 100 | **21** |
-| S₂ (Sensitivity) | 0.55 similarity | 0.55 × 100 | **55** |
-| S₃ (Grounding) | 0/5 claims supported | (0/5) × 100 | **0** |
-
-```
-C_raw = 0.35×21 + 0.15×55 + 0.50×0
-C_raw = 7.35 + 8.25 + 0.0
-C_raw = 15.6 → C = 18 (illustrative)
-```
-
-**Tier:** 🔴 **Low Confidence**  
-**Interpretation:** "The answer cannot be grounded in retrieved documents. The knowledge base may not contain the relevant procurement policy, or the policy may not have been retrieved. Do not use this answer. Consult the procurement team directly or verify that the correct documents are indexed."
-
-> **Note on Example 3:** The Sensitivity score is artificially elevated (55) because the model responds confidently even though it is hallucinating. This illustrates exactly why the Sensitivity signal cannot be weighted heavily — the model does not "know what it doesn't know." The grounding signal (S₃ = 0) correctly drives the score to Low tier despite the model's apparent confidence.
-
----
-
-## 9. Glossary
+## 11. Glossary
 
 | Term | Definition |
 |---|---|
-| **Confidence Score (C)** | The final integer score in [0, 100] output by GroundCheck representing trustworthiness of an AI answer relative to retrieved documents |
-| **Grounding / Faithfulness** | The degree to which an AI answer's claims are supported by retrieved source documents. High grounding = low hallucination risk |
-| **Hallucination** | Content generated by the AI that is not supported by retrieved documents, regardless of factual accuracy |
-| **Semantic Entropy** | An entropy measure computed over clusters of semantically equivalent responses, rather than raw token sequences |
-| **Consistency Signal (S₁)** | Confidence signal measuring stability of model output across multiple samples |
-| **Sensitivity Signal (S₂)** | Confidence signal measuring stability of model output under adversarial re-prompting |
-| **Grounding Signal (S₃)** | Confidence signal measuring claim-level support from retrieved documents |
-| **Fusion Weights (w₁, w₂, w₃)** | Fixed scalar weights that sum to 1, determining relative importance of each signal in the composite score |
-| **NLI** | Natural Language Inference — a task/model type that determines whether one sentence entails, contradicts, or is neutral to another |
-| **RAG** | Retrieval-Augmented Generation — an AI pipeline architecture that grounds LLM outputs in retrieved documents |
-| **Abstention** | A system recommendation that the AI decline to answer due to insufficient document grounding |
-| **Tier** | A qualitative category (Low / Medium / High) mapped from a numeric score range |
+| **Final Score** | Integer in [0, 100] representing trustworthiness of an AI answer relative to retrieved documents |
+| **Grounding Score** | Measure of how well the answer's claims are supported by retrieved documents via NLI entailment |
+| **Generation Confidence** | Measure of LLM certainty during token generation, derived from mean token probability |
+| **Fusion** | Weighted linear combination of normalized signals into a single score |
+| **NLI** | Natural Language Inference — determines whether one text entails, contradicts, or is neutral to another |
+| **Entailment** | NLI relationship where the premise logically supports the hypothesis |
+| **DeBERTa** | NLI model used for claim verification (DeBERTa-v3-small) |
+| **Token Probability** | Softmax probability the model assigns to each token it generates |
+| **Claim** | An atomic factual statement extracted from the generated answer for individual verification |
+| **Tier** | Categorical reliability label (HIGH / MEDIUM / LOW) mapped from a numeric score range |
+| **Hallucination** | Content in an AI answer not supported by retrieved documents |
+| **RAG** | Retrieval-Augmented Generation — grounds LLM output in retrieved documents |
+| **Faithfulness** | Synonym for groundedness — degree to which the answer reflects retrieved document content |
 
 ---
 
-## 10. References
+## 12. References
 
-1. **Kuhn, L., Gal, Y., & Farquhar, S. (2023).** Semantic Uncertainty: Linguistic Invariances for Uncertainty Estimation in Natural Language Generation. *ICLR 2023.* https://arxiv.org/abs/2302.09664
+1. **Project Documentation.** GroundCheck: RAG Confidence Scoring System. Capstone Project 2026. *(Internal — primary specification source for scope, signals, weights, and tier boundaries)*
 
-2. **Fadeeva, E., et al. (2023).** LM-Polygraph: Uncertainty Estimation for Language Models. *EMNLP 2023 System Demonstrations.* https://arxiv.org/abs/2311.07383
+2. **deepset. (2024).** Measuring LLM Groundedness in RAG Systems with Evaluation Metrics. *deepset Blog.* https://www.deepset.ai/blog/rag-llm-evaluation-groundedness  
+*(Industry implementation reference for Grounding Signal design and faithfulness framing)*
 
-3. **Vashurin, R., et al. (2024).** Benchmarking Uncertainty Quantification Methods for Large Language Models with LM-Polygraph. *TACL.* https://arxiv.org/abs/2406.15627
+3. **Haystack Documentation. (2024).** FaithfulnessEvaluator. https://docs.haystack.deepset.ai/docs/faithfulnessevaluator  
+*(Reference implementation — claim extraction + NLI entailment verification pipeline pattern)*
 
-4. **Kadavath, S., et al. (2022).** Language Models (Mostly) Know What They Know. *Anthropic.* https://arxiv.org/abs/2207.05221
+4. **He, P., et al. (2021).** DeBERTa: Decoding-Enhanced BERT with Disentangled Attention. *ICLR 2021.*  
+*(Architecture basis for the NLI model used in the Grounding Score)*
 
-5. **Pulvéric, F., Martinon, G., & Laurent, V. (2025).** Quantifying LLMs Uncertainty with Confidence Scores. *Capgemini Invent Lab / Medium.* https://medium.com/capgemini-invent-lab/quantifying-llms-uncertainty-with-confidence-scores-6bb8a6712aa0
+5. **Kuhn, L., Gal, Y., & Farquhar, S. (2023).** Semantic Uncertainty: Linguistic Invariances for Uncertainty Estimation in NLG. *ICLR 2023.* https://arxiv.org/abs/2302.09664  
+*(Background reading — foundational theory on why meaning-level uncertainty matters; relevant for future signal extensions beyond v1.0)*
 
-6. **deepset. (2024).** Measuring LLM Groundedness in RAG Systems with Evaluation Metrics. *deepset Blog.* https://www.deepset.ai/blog/rag-llm-evaluation-groundedness
-
-7. **Haystack Documentation. (2024).** FaithfulnessEvaluator. *deepset / Haystack.* https://docs.haystack.deepset.ai/docs/faithfulnessevaluator
-
-8. **Xiong, M., et al. (2024).** Can LLMs Express Their Uncertainty? An Empirical Evaluation of Confidence Elicitation in LLMs. *ICLR 2024.* https://openreview.net/forum?id=gjeQKFxFpZ
+6. **Fadeeva, E., et al. (2023).** LM-Polygraph: Uncertainty Estimation for Language Models. *EMNLP 2023.* https://arxiv.org/abs/2311.07383  
+*(Reference framework — relevant for future sprint signal work and normalization approaches)*
 
 ---
 
-## 11. Approval and Review
+## 13. Approval and Open Questions
 
-This document must be reviewed and explicitly approved by all team members before Signal implementation begins (Task 1.2).
+### Team Approval
+
+This document must be reviewed and explicitly approved by all team members before Task 1.2 (Signal Implementation) begins.
 
 | Name | Role | Status | Date |
 |---|---|---|---|
@@ -450,16 +459,18 @@ This document must be reviewed and explicitly approved by all team members befor
 | Aneesh | Frontend / UI | ⬜ Pending | — |
 | Ethan | Frontend / UI | ⬜ Pending | — |
 
-**Open questions for team discussion:**
-- [ ] Are the default weights (0.35 / 0.15 / 0.50) acceptable as v1.0 priors, or does the team want to adjust before implementation?
-- [ ] Is the abstention threshold of C < 15 appropriate, or should it be higher (e.g., C < 20)?
-- [ ] Should Medium tier trigger a *recommended* human review or just a *caution warning*? This affects the UI spec.
-- [ ] For claim extraction in Signal 3, which NLP approach will we use? (Rule-based chunking vs. LLM-based extraction)
+### Open Questions for Team Discussion
 
-**Advisor notes (Boeing):**
-- Confirm that the tier → action mapping aligns with Boeing's internal review escalation process
-- Confirm that the determinism requirement (same input = same score) satisfies audit/traceability needs
-- Confirm that grounding-relative-to-documents (not absolute-ground-truth) framing is acceptable for the use case
+- [ ] **Claim extraction method:** Rule-based sentence splitter vs. LLM-based atomic claim extraction? LLM extraction is more accurate but adds latency. Decision needed before Task 2.1 implementation starts.
+- [ ] **Gen Confidence: mean vs. minimum:** Current formula uses mean. Should the minimum also be tracked and surfaced in the UI breakdown? Useful for flagging single uncertain spans in otherwise confident answers.
+- [ ] **Provisional normalization bounds [0.3, 0.9]:** Validate these against actual Llama-3.1-8B / Mistral-7B output on the HPC in Week 1 before they influence calibration.
+- [ ] **Tier boundary review trigger:** Review after first 25 validation pairs (mid-Sprint 4) or wait for all 50–100?
+
+### Boeing Advisor Confirmation Needed
+
+- [ ] Confirm the grounding-relative-to-documents framing (not absolute ground truth) is appropriate for Boeing's operational context
+- [ ] Confirm the tier → recommended action mapping aligns with Boeing's internal review and escalation protocols  
+- [ ] Confirm deterministic scoring (same input = same output) satisfies audit trail requirements
 
 ---
 
