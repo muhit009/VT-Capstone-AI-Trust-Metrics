@@ -3,7 +3,7 @@
 **Document ID:** `fusion_algorithm.md`  
 **Version:** 1.0  
 **Status:** Draft — Pending Team Review  
-**Authors:** Confidence Engine (Xuhui & Muhit)  
+**Authors:** Confidence Engine   
 **Last Updated:** 2026-02-28  
 **Task Reference:** [1.3] Design fusion rules for combining multiple confidence signals  
 **Depends On:** `confidence_model.md` v1.0, `confidence_signals.md` v1.0
