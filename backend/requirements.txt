@@ -9,3 +9,12 @@ sqlalchemy
 python-dotenv
 psycopg2-binary
 requests
+numpy
+pypdf
+pdfplumber
+chardet
+sentence-transformers
+langchain-text-splitters
+chromadb
+pytest
+python-multipart
