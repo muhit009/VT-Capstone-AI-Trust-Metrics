@@ -3,7 +3,7 @@
 **Document ID:** `confidence_model.md`  
 **Version:** 1.0  
 **Status:** Draft — Pending Team Review  
-**Authors:** Confidence Engine (Xuhui & Muhit)  
+**Authors:** Confidence Engine   
 **Last Updated:** 2026-02-23  
 **Task Reference:** [1.1] Define Confidence Score Model and Scoring Range
 
