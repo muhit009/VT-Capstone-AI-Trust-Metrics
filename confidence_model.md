@@ -425,21 +425,20 @@ Final_Score = round((0.7 × 0.00 + 0.3 × 0.70) × 100)
 
 ## 12. References
 
-1. **Project Documentation.** GroundCheck: RAG Confidence Scoring System. Capstone Project 2026. *(Internal — primary specification source for scope, signals, weights, and tier boundaries)*
 
-2. **deepset. (2024).** Measuring LLM Groundedness in RAG Systems with Evaluation Metrics. *deepset Blog.* https://www.deepset.ai/blog/rag-llm-evaluation-groundedness  
+1. **deepset. (2024).** Measuring LLM Groundedness in RAG Systems with Evaluation Metrics. *deepset Blog.* https://www.deepset.ai/blog/rag-llm-evaluation-groundedness  
 *(Industry implementation reference for Grounding Signal design and faithfulness framing)*
 
-3. **Haystack Documentation. (2024).** FaithfulnessEvaluator. https://docs.haystack.deepset.ai/docs/faithfulnessevaluator  
+2. **Haystack Documentation. (2024).** FaithfulnessEvaluator. https://docs.haystack.deepset.ai/docs/faithfulnessevaluator  
 *(Reference implementation — claim extraction + NLI entailment verification pipeline pattern)*
 
-4. **He, P., et al. (2021).** DeBERTa: Decoding-Enhanced BERT with Disentangled Attention. *ICLR 2021.*  
+3. **He, P., et al. (2021).** DeBERTa: Decoding-Enhanced BERT with Disentangled Attention. *ICLR 2021.*  
 *(Architecture basis for the NLI model used in the Grounding Score)*
 
-5. **Kuhn, L., Gal, Y., & Farquhar, S. (2023).** Semantic Uncertainty: Linguistic Invariances for Uncertainty Estimation in NLG. *ICLR 2023.* https://arxiv.org/abs/2302.09664  
+4. **Kuhn, L., Gal, Y., & Farquhar, S. (2023).** Semantic Uncertainty: Linguistic Invariances for Uncertainty Estimation in NLG. *ICLR 2023.* https://arxiv.org/abs/2302.09664  
 *(Background reading — foundational theory on why meaning-level uncertainty matters; relevant for future signal extensions beyond v1.0)*
 
-6. **Fadeeva, E., et al. (2023).** LM-Polygraph: Uncertainty Estimation for Language Models. *EMNLP 2023.* https://arxiv.org/abs/2311.07383  
+5. **Fadeeva, E., et al. (2023).** LM-Polygraph: Uncertainty Estimation for Language Models. *EMNLP 2023.* https://arxiv.org/abs/2311.07383  
 *(Reference framework — relevant for future sprint signal work and normalization approaches)*
 
 ---
