@@ -3,7 +3,7 @@
 **Document ID:** `confidence_signals.md`  
 **Version:** 1.0  
 **Status:** Draft — Pending Team Review  
-**Authors:** Confidence Engine (Xuhui & Muhit)  
+**Authors:** Confidence Engine   
 **Last Updated:** 2026-02-23  
 **Task Reference:** [1.2] Identify and Document Confidence Signals  
 **Depends On:** `confidence_model.md` v1.0 (must be approved first)
