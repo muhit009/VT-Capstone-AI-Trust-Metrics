@@ -1,11 +1,11 @@
 # GroundCheck Confidence Signals
 
-**Document ID:** `confidence_signals.md`  
-**Version:** 1.0  
-**Status:** Draft — Pending Team Review  
-**Authors:** Confidence Engine (Xuhui & Muhit)  
-**Last Updated:** 2026-02-23  
-**Task Reference:** [1.2] Identify and Document Confidence Signals  
+**Document ID:** `confidence_signals.md`
+**Version:** 1.1
+**Status:** Updated — Reflects Sprint 2 Implementation
+**Authors:** Confidence Engine (Xuhui & Muhit)
+**Last Updated:** 2026-03-16
+**Task Reference:** [2.2] Implement Signal 2: Generation Confidence
 **Depends On:** `confidence_model.md` v1.0 (must be approved first)
 
 ---
@@ -39,7 +39,7 @@ This document is the implementation reference for the Confidence Engine team dur
 | **What it measures** | Whether claims in the answer are supported by retrieved documents | How certain the LLM was during token generation |
 | **Fusion weight** | 0.7 (70%) | 0.3 (30%) |
 | **Output range (raw)** | [0, 1] | log-probabilities → converted to [0, 1] |
-| **Model used** | `cross-encoder/nli-deberta-v3-small` | Llama-3.1-8B / Mistral-7B (same LLM used for answer generation) |
+| **Model used** | `cross-encoder/nli-deberta-v3-small` | `mistral:7b-instruct` via Ollama (same LLM used for answer generation) |
 | **Depends on** | Generated answer + retrieved document chunks | LLM logprobs during generation |
 | **Computed by** | Confidence Engine (post-generation) | Extracted from LLM generation output (Backend passes to Confidence Engine) |
 | **Computational cost** | Medium — one NLI forward pass per (claim, chunk) pair | Near-zero — logprobs are a byproduct of generation, no extra inference needed |
@@ -283,6 +283,8 @@ It does **not** measure:
 - Whether the answer is grounded in documents (that is Signal 1's job)
 - Uncertainty about the query itself
 
+**Implementation note (v1.1):** This signal is implemented as **Mistral-7B-Instruct-specific**. Mistral special tokens (`[INST]`, `</s>`, `<s>`, etc.) are filtered out before computing the mean probability. This prevents special tokens — which carry artificially suppressed probabilities — from deflating the score. See Section 4.5 for the full token filter list.
+
 ### 4.2 Data Requirements
 
 Generation Confidence requires logprobs from the LLM, which must be requested at generation time. The **Backend team** must configure the LLM serving layer to return logprobs with each generation response.
@@ -296,93 +298,137 @@ Generation Confidence requires logprobs from the LLM, which must be requested at
 
 ### 4.3 How to Extract Logprobs
 
-**Using Ollama (v0.12.11+):**
+**Current implementation — Ollama with Mistral-7B-Instruct:**
+
+The `generation_confidence_scorer.from_ollama()` method accepts the raw dict returned by `confidence.ollama_client.generate()` and extracts logprobs automatically:
+
+```python
+from confidence.generation_confidence import generation_confidence_scorer
+from confidence.ollama_client import generate
+
+result = generate(prompt)   # returns {"answer": ..., "logprobs": [...], "tokens": [...]}
+gen_result = generation_confidence_scorer.from_ollama(result)
+```
+
+`from_ollama()` checks for two response formats in order:
+
+1. **Structured form** — `response["context_logprobs"]` is a list of `{"token": str, "logprob": float}` dicts (Ollama v0.12.11+ with full token detail)
+2. **Plain form** — `response["logprobs"]` is a flat list of floats alongside an optional `response["tokens"]` string list
+
+For direct integration (backend passes already-extracted values):
+
+```python
+# Backend extracts logprobs and tokens from the Ollama response
+logprobs = data["logprobs"]   # list[float] — natural log probabilities
+tokens   = data["tokens"]     # list[str]  — optional, enables special-token filtering
+
+gen_result = generation_confidence_scorer.compute(logprobs, tokens=tokens)
+```
+
+**Ollama configuration (Mistral-7B-Instruct, `mistral:7b-instruct`):**
 
 ```python
 import requests
-import json
 
-response = requests.post('http://localhost:11434/api/generate', json={
-    "model": "llama3.1:8b",
-    "prompt": full_prompt,  # system + context + query
+response = requests.post("http://localhost:11434/api/generate", json={
+    "model": "mistral:7b-instruct",
+    "prompt": full_prompt,
     "stream": False,
-    "logprobs": True,       # ← enables logprob extraction
+    "logprobs": True,       # requires Ollama >= v0.12.11
     "options": {
-        "temperature": 0,   # greedy decoding for deterministic scoring
+        "temperature": 0,   # deterministic — required for audit trail
         "seed": 42
     }
 })
 
 data = response.json()
-# data['logprobs'] contains per-token log probabilities
-logprobs = [token_data['logprob'] for token_data in data['logprobs']]
+# Pass directly to from_ollama() or extract manually:
+logprobs = [entry["logprob"] for entry in data.get("context_logprobs", [])]
 ```
 
-**Using vLLM:**
-
-```python
-from vllm import LLM, SamplingParams
-
-llm = LLM(model="meta-llama/Llama-3.1-8B-Instruct")
-
-sampling_params = SamplingParams(
-    temperature=0,
-    max_tokens=512,
-    logprobs=1      # ← return logprob for the chosen token at each step
-)
-
-outputs = llm.generate([full_prompt], sampling_params)
-output = outputs[0].outputs[0]
-
-# Extract logprobs for each generated token
-logprobs = []
-for token_id, logprob_data in output.logprobs:
-    logprobs.append(logprob_data[token_id].logprob)  # log-probability of chosen token
-```
+> **Note:** vLLM is not used in the current implementation. All generation runs through Ollama locally. vLLM remains documented in Appendix as a future HPC deployment option.
 
 ### 4.4 Step-by-Step Computation
 
 ```
-Step 1: Receive logprobs (list of log-probabilities) from LLM generation
-Step 2: Convert log-probabilities to probabilities via exp()
-Step 3: Compute mean token probability
-Step 4: Normalize to [0, 1] using provisional normalization constants
+Step 1: Receive logprobs + tokens from LLM generation
+Step 2: Filter out Mistral special tokens
+Step 3: Convert remaining log-probabilities to probabilities via exp()
+Step 4: Compute mean token probability (rounded to 6 decimal places)
+Step 5: Classify confidence level
+Step 6: Normalize to [0, 1]
 ```
 
 **Step 1 — Receive logprobs**
 
 Logprobs are the natural log of the probability of each chosen token. They are always ≤ 0 (since probabilities are in [0, 1] and log(p) ≤ 0 for p ≤ 1). A logprob of 0.0 means certainty (p=1.0); a logprob of -10.0 means very low probability (p ≈ 0.000045).
 
-**Step 2 — Convert to probabilities**
+**Step 2 — Filter Mistral special tokens**
+
+Before computing the mean, any token whose string value appears in the Mistral special-token set is removed from consideration. These tokens are structural artifacts of the Mistral instruction format; their log-probabilities do not reflect answer-quality confidence.
+
+```python
+MISTRAL_SPECIAL_TOKENS = frozenset({
+    "<s>", "</s>", "[INST]", "[/INST]", "<<SYS>>", "<</SYS>>",
+    "<unk>", "<pad>", "<|im_start|>", "<|im_end|>", "<0x0A>",
+})
+# filtering requires tokens list to be passed alongside logprobs
+filtered = [(lp, tok) for lp, tok in zip(logprobs, tokens)
+            if tok not in MISTRAL_SPECIAL_TOKENS]
+```
+
+If `tokens` is not provided, no filtering is applied (backwards-compatible path).
+
+**Step 3 — Convert to probabilities**
 
 ```python
 import math
-token_probs = [math.exp(lp) for lp in logprobs]
+token_probs = [math.exp(lp) for lp, _ in filtered]
 ```
 
-**Step 3 — Mean token probability**
+**Step 4 — Mean token probability**
 
 ```python
-mean_token_prob = sum(token_probs) / len(token_probs)
+raw_mean = round(sum(token_probs) / len(token_probs), 6)
 ```
 
-This is the raw Generation Confidence value before normalization, in [0, 1].
+Rounding to 6 decimal places ensures boundary conditions (e.g., raw_mean exactly at 0.8) are evaluated consistently, avoiding floating-point edge cases.
 
-**Step 4 — Normalize (provisional)**
+**Step 5 — Classify confidence level**
+
+Applied to the raw mean probability before normalization:
+
+| Level | Condition |
+|---|---|
+| `HIGHLY_CONFIDENT` | `raw_mean > 0.8` |
+| `MODERATE` | `0.5 < raw_mean <= 0.8` |
+| `UNCERTAIN` | `raw_mean <= 0.5` |
+
+**Step 6 — Normalize (provisional)**
 
 ```python
 def normalize_gen_confidence(raw_mean_prob: float,
                               low: float = 0.3,
                               high: float = 0.9) -> float:
     """
-    Provisional normalization based on empirical range for Llama/Mistral.
+    Provisional normalization based on empirical range for Mistral-7B-Instruct.
     Replace with percentile-based normalization after Sprint 4 calibration.
     """
     normalized = (raw_mean_prob - low) / (high - low)
     return max(0.0, min(1.0, normalized))  # clip to [0, 1]
 ```
 
-The constants `[0.3, 0.9]` represent the approximate empirical range of mean token probabilities for Llama-3.1-8B and Mistral-7B on typical QA tasks. These must be validated in Week 1–2 on the actual HPC setup (see Section 7.2).
+The constants `[0.3, 0.9]` represent the approximate empirical range of mean token probabilities for Mistral-7B-Instruct on typical QA tasks. These must be validated on the actual HPC setup (see Section 7.2).
+
+**Edge cases — empty or all-filtered input:**
+
+Instead of raising an exception, the scorer returns a degraded result:
+
+```
+score = 0.0, level = UNCERTAIN, warning = "<descriptive message>", num_tokens = 0
+```
+
+This prevents a single missing logprob list from crashing the full confidence pipeline.
 
 ### 4.5 Why Mean Token Probability, Not Sequence Probability
 
@@ -392,68 +438,92 @@ Mean token probability sidesteps this by averaging instead of multiplying. It gi
 
 **Known caveat:** Technical vocabulary (part numbers, chemical formulas, domain-specific abbreviations) will have inherently lower token probabilities regardless of model confidence, because these tokens are rare in the training distribution. The normalization in Step 4 partially mitigates this — but it remains a limitation, especially for Boeing's engineering-specific language.
 
-### 4.6 Full Implementation Sketch
+### 4.5 Mistral Special Token Filter List
+
+The following token strings are filtered before computing the mean probability. This list is defined as `MISTRAL_SPECIAL_TOKENS` in `confidence/generation_confidence.py`:
+
+| Token | Role |
+|---|---|
+| `<s>` | BOS (beginning of sequence) |
+| `</s>` | EOS (end of sequence) |
+| `[INST]` | Instruction start marker |
+| `[/INST]` | Instruction end marker |
+| `<<SYS>>` | System prompt start |
+| `<</SYS>>` | System prompt end |
+| `<unk>` | Unknown token |
+| `<pad>` | Padding token |
+| `<\|im_start\|>` | Chat message start (alternate format) |
+| `<\|im_end\|>` | Chat message end (alternate format) |
+| `<0x0A>` | Newline byte literal |
+
+### 4.6 Full Implementation Reference
+
+The production module is `confidence/generation_confidence.py`. Key public API:
 
 ```python
-import math
+from confidence.generation_confidence import generation_confidence_scorer, GenConfidenceResult
 
-class GenerationConfidenceScorer:
-    def __init__(self, norm_low: float = 0.3, norm_high: float = 0.9):
-        self.norm_low = norm_low
-        self.norm_high = norm_high
-    
-    def compute(self, logprobs: list[float], tokens: list[str] = None) -> dict:
-        if not logprobs:
-            return {
-                'gen_confidence_raw': 0.0,
-                'gen_confidence_normalized': 0.0,
-                'num_tokens': 0,
-                'warning': 'No logprobs received from LLM'
-            }
-        
-        # Convert log-probabilities to probabilities
-        token_probs = [math.exp(lp) for lp in logprobs]
-        
-        # Mean token probability (raw)
-        raw_mean = sum(token_probs) / len(token_probs)
-        
-        # Normalize to [0, 1]
-        normalized = (raw_mean - self.norm_low) / (self.norm_high - self.norm_low)
-        normalized = max(0.0, min(1.0, normalized))
-        
-        result = {
-            'gen_confidence_raw': round(raw_mean, 4),
-            'gen_confidence_normalized': round(normalized, 4),
-            'num_tokens': len(token_probs),
-            'min_token_prob': round(min(token_probs), 4),
-            'max_token_prob': round(max(token_probs), 4),
-        }
-        
-        # Optional: include per-token breakdown for UI and audit
-        if tokens and len(tokens) == len(token_probs):
-            result['token_details'] = [
-                {'token': t, 'probability': round(p, 4)}
-                for t, p in zip(tokens, token_probs)
-            ]
-        
-        return result
+# Path A — parse raw Ollama response dict directly
+gen_result: GenConfidenceResult = generation_confidence_scorer.from_ollama(ollama_response)
+
+# Path B — use already-extracted logprobs (backend integration path)
+gen_result: GenConfidenceResult = generation_confidence_scorer.compute(
+    logprobs,                    # list[float] — natural log probabilities
+    tokens=tokens,               # list[str] | None — enables special-token filtering
+    include_token_details=False  # set True for per-token audit output
+)
+
+# Access results
+gen_result.score          # float [0,1]  — fed to fusion
+gen_result.level          # str          — HIGHLY_CONFIDENT | MODERATE | UNCERTAIN
+gen_result.raw_mean_prob  # float        — pre-normalization mean probability
+gen_result.num_tokens     # int          — tokens after filtering
+gen_result.num_filtered   # int          — special tokens removed
+gen_result.min_prob       # float
+gen_result.max_prob       # float
+gen_result.warning        # str | None   — set on degraded/empty input
+gen_result.token_details  # list[dict]   — populated only if requested
 ```
+
+The module-level singleton `generation_confidence_scorer` is stateless and reused across requests (no model weights — computation is pure arithmetic).
 
 ### 4.7 Output Schema
 
+`GenConfidenceResult` dataclass fields returned by `compute()` or `from_ollama()`:
+
 ```json
 {
-  "gen_confidence_raw": 0.7423,
-  "gen_confidence_normalized": 0.7372,
-  "num_tokens": 47,
-  "min_token_prob": 0.3102,
-  "max_token_prob": 0.9981,
+  "score": 0.737167,
+  "level": "MODERATE",
+  "raw_mean_prob": 0.742300,
+  "num_tokens": 44,
+  "num_filtered": 3,
+  "min_prob": 0.310200,
+  "max_prob": 0.998100,
+  "warning": null,
   "token_details": [
-    {"token": "The", "probability": 0.9821},
-    {"token": "maximum", "probability": 0.8934},
-    {"token": "torque", "probability": 0.4521},
-    "..."
+    {"token": "The", "logprob": -0.0182, "prob": 0.981900},
+    {"token": "maximum", "logprob": -0.1128, "prob": 0.893400},
+    {"token": "torque", "logprob": -0.7938, "prob": 0.452100}
   ]
+}
+```
+
+`token_details` is an empty list unless `include_token_details=True` is passed to `compute()`.
+
+**Degraded result (empty or all-filtered input):**
+
+```json
+{
+  "score": 0.0,
+  "level": "UNCERTAIN",
+  "raw_mean_prob": 0.0,
+  "num_tokens": 0,
+  "num_filtered": 3,
+  "min_prob": 0.0,
+  "max_prob": 0.0,
+  "warning": "All tokens were Mistral special tokens — score degraded.",
+  "token_details": []
 }
 ```
 
@@ -577,28 +647,56 @@ result = scorer.compute(answer, chunks)
 # Should return 0.0 with a warning if no claims extractable
 ```
 
-### 7.2 Generation Confidence — Smoke Tests
+### 7.2 Generation Confidence — Unit Tests
 
-```python
-scorer = GenerationConfidenceScorer()
+The full test suite is in `tests/test_generation_confidence.py` (13 tests). Run with:
 
-# Test 1: High confidence (simulate high-probability tokens)
-high_conf_logprobs = [-0.05, -0.08, -0.12, -0.06]  # probabilities ≈ 0.95, 0.92, 0.89, 0.94
-result = scorer.compute(high_conf_logprobs)
-assert result['gen_confidence_normalized'] > 0.70, "Expected high normalized score"
-
-# Test 2: Low confidence (simulate uncertain tokens)
-low_conf_logprobs = [-2.5, -3.1, -2.8, -2.2]  # probabilities ≈ 0.08, 0.04, 0.06, 0.11
-result = scorer.compute(low_conf_logprobs)
-assert result['gen_confidence_normalized'] < 0.30, "Expected low normalized score"
-
-# Test 3: Validate normalization bounds against actual HPC output
-# Run actual Llama/Mistral generation on 10 test queries
-# Log raw mean token probabilities
-# Verify they fall in [0.3, 0.9] range — if not, update norm constants
+```bash
+./venv/Scripts/python.exe -m pytest tests/test_generation_confidence.py -v
 ```
 
-**This validation in Week 1–2 is critical** — if the actual raw mean probabilities from Llama-3.1-8B on the HPC fall outside [0.3, 0.9], the normalization constants must be updated before they affect any downstream scores.
+Key tests and their coverage:
+
+```python
+import math
+from confidence.generation_confidence import generation_confidence_scorer, HIGHLY_CONFIDENT, MODERATE, UNCERTAIN
+
+def lp(prob): return math.log(prob)
+
+# Confidence level classification
+result = generation_confidence_scorer.compute([lp(0.85)] * 30)
+assert result.level == HIGHLY_CONFIDENT and result.score > 0
+
+result = generation_confidence_scorer.compute([lp(0.65)] * 30)
+assert result.level == MODERATE
+
+result = generation_confidence_scorer.compute([lp(0.35)] * 30)
+assert result.level == UNCERTAIN
+
+# Boundary: raw_mean == 0.80 is NOT > 0.8 → MODERATE (strict inequality)
+result = generation_confidence_scorer.compute([lp(0.80)] * 30)
+assert result.level == MODERATE
+
+# Edge case: empty input — no exception, degraded result
+result = generation_confidence_scorer.compute([])
+assert result.score == 0.0 and result.level == UNCERTAIN and result.warning is not None
+
+# Special token filtering
+real_tokens    = ["hello", "world", "how", "are", "you"]
+special_tokens = ["<s>", "</s>", "[INST]"]
+tokens  = real_tokens + special_tokens
+logprobs = [lp(0.8)] * 5 + [lp(0.1)] * 3
+result = generation_confidence_scorer.compute(logprobs, tokens=tokens)
+assert result.num_filtered == 3  # 3 special tokens removed
+assert result.num_tokens == 5    # only real tokens counted
+assert abs(result.raw_mean_prob - 0.8) < 1e-5  # score based on real tokens only
+
+# Normalization clipping
+result = generation_confidence_scorer.compute([lp(0.99)] * 30)
+assert result.score == 1.0  # clips to ceiling
+```
+
+**Normalization validation on HPC (Sprint 4 action item):** Run Mistral-7B-Instruct on 10–20 test queries via Ollama and record `raw_mean_prob` values. If they fall outside [0.3, 0.9], update `GEN_CONF_RAW_MIN` / `GEN_CONF_RAW_MAX` in `confidence/config.py`.
 
 ---
 
@@ -626,13 +724,14 @@ assert result['gen_confidence_normalized'] < 0.30, "Expected low normalized scor
 
 ---
 
-### Open Questions Before Implementation
+### Open Questions / Action Items
 
-- [ ] **Backend: Ollama version on HPC** — confirm it is ≥ v0.12.11 for logprob support. If vLLM is used instead, the API call differs (see Section 4.3). This must be resolved in Week 1 before any Signal 2 work starts.
-- [ ] **Chunk size vs. NLI context window** — DeBERTa-v3-small has a 512-token limit. Confirm with backend team that document chunks are ≤ 512 tokens, or implement truncation in the Grounding Scorer.
-- [ ] **Claim extraction decision** — sentence splitting (Option A) vs. LLM-based (Option B)? Team needs to decide before Task 2.1. Recommendation is to start with Option A.
-- [ ] **NLI batching** — should all (chunk, claim) pairs be batched in a single NLI call for efficiency? The `CrossEncoder.predict()` method accepts a list of pairs natively, so batching is straightforward and recommended.
-- [ ] **Normalization validation** — who is responsible for running the Week 1–2 Llama/Mistral logprob range check? Proposed: Xuhui runs 10 test queries on HPC and reports raw mean token probability range to the team.
+- [x] **Model selection** — resolved: Mistral-7B-Instruct (`mistral:7b-instruct`) via Ollama. Llama-3.1-8B is not used.
+- [x] **Signal 2 implementation** — resolved: `confidence/generation_confidence.py` delivered in Sprint 2, including special-token filtering, confidence level labels, `from_ollama()`, graceful empty-input handling, 13 unit tests, and a performance benchmark.
+- [x] **Claim extraction decision** — resolved: sentence splitting (Option A) implemented in `grounding_scorer.py` for v1.0.
+- [ ] **Backend: Ollama version on HPC** — confirm Ollama ≥ v0.12.11 is installed on university HPC for logprob support.
+- [ ] **Chunk size vs. NLI context window** — confirm with backend team that document chunks are ≤ 512 tokens (DeBERTa-v3-small limit), or add truncation to `grounding_scorer.py`.
+- [ ] **Normalization validation (Sprint 4)** — run Mistral-7B-Instruct on 10–20 HPC test queries, record `raw_mean_prob` distribution, and update `GEN_CONF_RAW_MIN` / `GEN_CONF_RAW_MAX` in `config.py` if empirical range differs from [0.3, 0.9].
 
 ---
 
