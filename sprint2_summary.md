@@ -189,11 +189,13 @@ Both claims in the answer were fully supported by the retrieved documents. The m
 
 ## Test Results
 
-| Test Suite | Tests | Result |
-|---|---|---|
-| Signal 2 unit tests | 13 / 13 | All pass |
-| Signal 2 benchmark | 0.15ms per call | PASS (threshold: 300ms) |
-| End-to-end HPC run | 1 query | Score 99, tier HIGH |
+| What was tested | Result |
+|---|---|
+| Signal 2 unit tests (13 tests) | All 13 pass |
+| Signal 2 performance benchmark | 0.15ms per call — PASS (threshold: 300ms) |
+| End-to-end HPC pipeline run | Score 99, tier HIGH on 1 real query |
+
+Note: Unit tests cover Signal 2 (generation confidence) only. Grounding score and fusion do not yet have dedicated unit tests — this is a known gap for Sprint 3.
 
 ---
 
