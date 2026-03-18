@@ -41,7 +41,7 @@ Signal 2 (Generation Confidence) is now fully implemented as `confidence/generat
 
 ### What the Module Does
 
-1. **Receives** per-token log-probabilities from Mistral-7B-Instruct generation output
+1. **Receives** per-token log-probabilities from Mistral-Small-3.1-24B-Instruct generation output
 2. **Filters** Mistral special tokens (`[INST]`, `</s>`, `<s>`, etc.) before computing the mean — prevents structural tokens from artificially deflating the score
 3. **Computes** mean token probability over the remaining tokens
 4. **Classifies** a confidence level based on the raw mean:
@@ -101,7 +101,7 @@ All 13 acceptance criteria tests pass. Boundary conditions (strict inequalities 
 
 **Run:** `python dev/benchmark_gen_confidence.py`
 
-**Setup:** 1000 tokens per call, 1000 iterations, baseline = 3000 ms (Mistral-7B on RTX 3060 Ti)
+**Setup:** 1000 tokens per call, 1000 iterations, baseline = 3000 ms (Mistral-Small-24B on L40S)
 
 ```
 Phase 1  Extraction :  0.0001 ms / call
@@ -133,21 +133,21 @@ The current normalization formula uses provisional constants:
 score = clip((raw_mean − 0.3) / 0.6, 0.0, 1.0)
 ```
 
-These constants (`GEN_CONF_RAW_MIN = 0.3`, `GEN_CONF_RAW_MAX = 0.9` in `config.py`) are based on expected Mistral-7B-Instruct behavior on general QA tasks, **not measured on actual HPC runs**. If the real distribution of raw mean probabilities on Boeing engineering queries falls outside [0.3, 0.9], the normalized scores will be systematically off — clipping to 0.0 or 1.0 too frequently.
+These constants (`GEN_CONF_RAW_MIN = 0.3`, `GEN_CONF_RAW_MAX = 0.9` in `config.py`) are based on expected Mistral behavior on general QA tasks. **First HPC run (2026-03-18) recorded `raw_mean = 0.9617`, which clips to 1.0** — confirming the upper bound needs to be raised. See Section 6 for the actual result. If the real distribution of raw mean probabilities on Boeing engineering queries falls outside [0.3, 0.9], the normalized scores will be systematically off — clipping to 0.0 or 1.0 too frequently.
 
 **This is the single most important thing to validate on HPC.** See Section 5.
 
-### L2 — No Real Logprobs Tested Yet
+### L2 — Normalization Range Needs Calibration
 
-All unit tests and benchmarks use synthetic logprobs (`math.log(prob)` for fixed probabilities). The scorer has not yet been exercised against actual Mistral-7B-Instruct output from Ollama on real queries. Behavior on real token distributions (especially engineering vocabulary) is unknown.
+All unit tests and benchmarks use synthetic logprobs. The first real HPC run (2026-03-18) with Mistral-Small-3.1-24B via vLLM returned `raw_mean = 0.9617` on an easy context-grounded query — exceeding `GEN_CONF_RAW_MAX = 0.9` and clipping to 1.0. More queries across varying difficulty are needed to determine the correct range for this model.
 
 ### L3 — Special Token List May Be Incomplete
 
 The Mistral special token filter covers the standard instruction-format tokens. If Ollama returns additional byte-level tokens (e.g., `<0x09>` for tab, or other byte literals) in the logprob stream, they will not be filtered. Investigate during HPC validation by inspecting `token_details` output for unexpected low-probability tokens.
 
-### L4 — Tokens Not Always Available from Ollama
+### L4 — vLLM Token Format
 
-`from_ollama()` works correctly when Ollama returns `tokens` or `context_logprobs`. If Ollama only returns a flat `logprobs` list without token strings, special-token filtering is skipped silently (no error). Confirm Ollama's actual response format on HPC before assuming filtering is active.
+The pipeline now uses vLLM (not Ollama) on HPC. `vllm_client.py` reads `token_logprobs` and `tokens` from the vLLM `/v1/completions` response. Special-token filtering is applied using `MISTRAL_SPECIAL_TOKENS`. Confirm token strings are populated correctly by inspecting `token_details` in the result for unexpected low-probability tokens.
 
 ---
 
@@ -307,12 +307,48 @@ Confirm PASS. On HPC (CPU-only for confidence scoring, GPU reserved for Mistral)
 
 For the backend team to wire Signal 2 into the production RAG pipeline:
 
-- [ ] Ollama is configured with `"logprobs": True` and `"temperature": 0, "seed": 42` in all generation calls
-- [ ] The raw Ollama response dict is passed to `confidence_engine.score()` via the `logprobs` parameter (already extracted by `ollama_client.generate()`)
-- [ ] Ollama version on production server is ≥ v0.12.11
+- [ ] vLLM is configured with `logprobs=1`, `temperature=0`, `seed=42` in all generation calls
+- [ ] The extracted logprobs list is passed to `confidence_engine.score()` via the `logprobs` parameter (already extracted by `vllm_client.generate()`)
+- [ ] vLLM server is started with `vllm serve <model> --port 8000` before the pipeline runs
 - [ ] `confidence_engine.score()` return value includes `signals.gen_confidence_raw` and `signals.gen_confidence_normalized` in the audit trail passed to the frontend
 - [ ] Frontend displays the `level` field (`HIGHLY_CONFIDENT` / `MODERATE` / `UNCERTAIN`) alongside or below the numeric score and tier badge
 
 ---
 
-*End of Document — signal2_results_and_hpc.md v1.0*
+## 7. First Real HPC Validation Result (2026-03-18)
+
+**Environment:** VT ARC Falcon cluster, node `fal039`, NVIDIA L40S 48 GB GPU
+**Model:** `mistralai--Mistral-Small-3.1-24B-Instruct-2503` served via vLLM 0.17.1 (fp8 quantization)
+**Command:** `vllm serve <model> --port 8000 --max-model-len 8192 --served-model-name mistral-small-24b --quantization fp8`
+
+**Query:** "What is the purpose of a Preliminary Design Review in systems engineering?"
+
+```json
+{
+  "score": 99,
+  "tier": "HIGH",
+  "signals": {
+    "grounding_score": 0.980906,
+    "grounding_num_claims": 2,
+    "grounding_supported": 2,
+    "gen_confidence_raw": 0.96171,
+    "gen_confidence_normalized": 1.0,
+    "grounding_contribution": 68.6634,
+    "gen_conf_contribution": 30.0
+  },
+  "degraded": false,
+  "warning": null
+}
+```
+
+**Observations:**
+- Pipeline ran end-to-end successfully — first real HPC result ✅
+- `gen_confidence_raw = 0.9617` exceeds `GEN_CONF_RAW_MAX = 0.9` and clips to 1.0 — normalization upper bound needs to be raised
+- This was an easy, directly context-grounded query — harder queries will produce lower raw scores and help calibrate the range
+- `grounding_score = 0.981` — both claims in the answer are fully supported by demo chunks
+
+**Action required:** Run 10+ queries of varying difficulty (in-context, out-of-context, ambiguous) to determine the empirical `raw_mean_prob` range for this model and update `GEN_CONF_RAW_MIN` / `GEN_CONF_RAW_MAX` in `config.py`.
+
+---
+
+*End of Document — signal2_results_and_hpc.md v1.1*

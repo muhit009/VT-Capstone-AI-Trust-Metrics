@@ -80,11 +80,11 @@ These are hard design boundaries that directly shape the model — not preferenc
 | Constraint | Description | Implication |
 |---|---|---|
 | **Exactly two signals** | Project scope explicitly limits to Grounding Score + Generation Confidence | No additional signals in v1.0; three-signal approaches are out of scope |
-| **Single open-source LLM** | **Mistral-7B-Instruct** (`mistral:7b-instruct`) via Ollama on university HPC | Token-level logit access is available — Generation Confidence signal is feasible |
+| **Single open-source LLM** | **Mistral-Small-3.1-24B-Instruct** via vLLM on VT ARC HPC (Falcon cluster, L40S GPU) | Token-level logit access is available — Generation Confidence signal is feasible |
 | **Fixed fusion weights** | Weights are not user-configurable in MVP | Simplifies implementation; configurable weights are a documented stretch goal |
 | **No ground truth at inference time** | System scores live queries without annotated answers | All signals must be unsupervised or derived directly from model outputs |
 | **Deterministic scoring** | Same inputs must always produce the same score | Required for Boeing audit and traceability requirements |
-| **Logit access via open-source model** | Mistral-7B-Instruct exposes token probabilities via Ollama | Generation Confidence would not be available with black-box API models (e.g., GPT-4) |
+| **Logit access via open-source model** | Mistral-Small-3.1-24B-Instruct exposes token probabilities via vLLM | Generation Confidence would not be available with black-box API models (e.g., GPT-4) |
 
 ---
 
@@ -130,7 +130,7 @@ Cosine similarity measures surface-level textual overlap between the full answer
 
 **What it measures:** How certain the LLM was during generation, as reflected by the probability mass it placed on each token it chose. High token probabilities across the answer = the model was converging clearly. Low/spread token probabilities = the model was uncertain between alternatives.
 
-**Why it is the secondary signal (30% weight):** Generation confidence catches uncertainty that grounding alone cannot — cases where the model's internal state signals doubt even when retrieved documents appear relevant. It is a supplementary check. This signal is uniquely feasible in GroundCheck because Mistral-7B-Instruct exposes logits through Ollama — it would not be available with closed API models.
+**Why it is the secondary signal (30% weight):** Generation confidence catches uncertainty that grounding alone cannot — cases where the model's internal state signals doubt even when retrieved documents appear relevant. It is a supplementary check. This signal is uniquely feasible in GroundCheck because Mistral-Small-3.1-24B-Instruct exposes logits through vLLM — it would not be available with closed API models.
 
 **Confidence level interpretation** (applied to raw mean probability before normalization):
 
