@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=vllm-server
 #SBATCH --account=muataz
-#SBATCH --partition=normal_q
+#SBATCH --partition=l40s_normal_q
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
