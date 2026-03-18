@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from confidence.grounding_scorer import grounding_scorer
-from confidence.gen_confidence_scorer import gen_confidence_scorer
+from confidence.generation_confidence import generation_confidence_scorer
 from confidence.fusion import fuse
 from confidence.engine import confidence_engine
 
