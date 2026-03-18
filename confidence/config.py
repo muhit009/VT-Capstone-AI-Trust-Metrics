@@ -13,7 +13,7 @@ OLLAMA_OPTIONS  = {
 # vLLM (HPC — VT ARC Falcon / TinkerCliffs)
 # ---------------------------------------------------------------------------
 VLLM_BASE_URL = "http://localhost:8000"
-VLLM_MODEL    = "/common/data/models/mistralai--Mistral-Small-3.1-24B-Instruct-2503"
+VLLM_MODEL    = "mistral-small-24b"
 VLLM_TIMEOUT  = 120                       # seconds
 VLLM_OPTIONS  = {
     "temperature": 0,   # deterministic — required for audit trail
