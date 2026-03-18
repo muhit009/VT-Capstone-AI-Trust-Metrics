@@ -5,21 +5,32 @@ Calls the vLLM OpenAI-compatible HTTP API to generate answers and extract
 per-token log-probabilities needed by GenerationConfidenceScorer.
 
 vLLM is served on HPC via:
-    python -m vllm.entrypoints.openai.api_server \
-        --model /common/data/models/mistralai--Mistral-Small-3.1-24B-Instruct-2503 \
-        --port 8000 --max-model-len 8192
+    vllm serve /common/data/models/mistralai--Mistral-Small-3.1-24B-Instruct-2503 \
+        --port 8000 --max-model-len 8192 --served-model-name mistral-small-24b \
+        --quantization fp8
 
 Then run this pipeline normally:
-    python dev/local_pipeline.py
+    python dev/hpc_pipeline.py
 """
 from __future__ import annotations
 
-import math
+import logging
+import os
+import time
+
 import requests
 from typing import TypedDict
 
-import os
-from .config import VLLM_BASE_URL as _VLLM_BASE_URL, VLLM_MODEL, VLLM_TIMEOUT, VLLM_OPTIONS
+from .config import (
+    VLLM_BASE_URL as _VLLM_BASE_URL,
+    VLLM_MODEL,
+    VLLM_TIMEOUT,
+    VLLM_OPTIONS,
+    VLLM_RETRY_ATTEMPTS,
+    VLLM_RETRY_DELAY,
+)
+
+logger = logging.getLogger(__name__)
 
 # Allow overriding the base URL via environment variable
 # e.g. VLLM_BASE_URL=http://fal039:8000 python dev/hpc_pipeline.py
@@ -34,8 +45,8 @@ class VLLMResult(TypedDict):
 
 
 def generate(
-    prompt: str,
-    model: str = VLLM_MODEL,
+    prompt:  str,
+    model:   str = VLLM_MODEL,
     options: dict | None = None,
 ) -> VLLMResult:
     """
@@ -53,7 +64,7 @@ def generate(
 
     Raises
     ------
-    RuntimeError if vLLM is unreachable or returns a non-200 status.
+    RuntimeError if vLLM is unreachable after all retries or returns a non-200 status.
     ValueError   if the response is missing expected logprob fields.
     """
     merged = {**VLLM_OPTIONS, **(options or {})}
@@ -67,50 +78,65 @@ def generate(
         "logprobs":    1,       # return logprob for the chosen token at each step
     }
 
-    try:
-        resp = requests.post(
-            f"{VLLM_BASE_URL}/v1/completions",
-            json=payload,
-            timeout=VLLM_TIMEOUT,
-        )
-    except requests.exceptions.ConnectionError:
-        raise RuntimeError(
-            f"Cannot reach vLLM at {VLLM_BASE_URL}. "
-            "Start the server with: python -m vllm.entrypoints.openai.api_server "
-            f"--model {model} --port 8000"
-        )
+    last_error = None
+    for attempt in range(1, VLLM_RETRY_ATTEMPTS + 1):
+        try:
+            logger.debug("vLLM generate attempt %d/%d", attempt, VLLM_RETRY_ATTEMPTS)
+            resp = requests.post(
+                f"{VLLM_BASE_URL}/v1/completions",
+                json=payload,
+                timeout=VLLM_TIMEOUT,
+            )
 
-    if resp.status_code != 200:
-        raise RuntimeError(
-            f"vLLM returned HTTP {resp.status_code}: {resp.text[:300]}"
-        )
+            if resp.status_code != 200:
+                raise RuntimeError(
+                    f"vLLM returned HTTP {resp.status_code}: {resp.text[:300]}"
+                )
 
-    data   = resp.json()
-    choice = data["choices"][0]
-    answer = choice["text"]
+            data   = resp.json()
+            choice = data["choices"][0]
+            answer = choice["text"]
 
-    # vLLM returns logprobs under choice["logprobs"]
-    raw = choice.get("logprobs")
-    if raw is None:
-        raise ValueError(
-            "vLLM response missing 'logprobs'. "
-            "Ensure logprobs=1 is supported and the model is loaded correctly."
-        )
+            # vLLM returns logprobs under choice["logprobs"]
+            raw = choice.get("logprobs")
+            if raw is None:
+                raise ValueError(
+                    "vLLM response missing 'logprobs'. "
+                    "Ensure logprobs=1 is supported and the model is loaded correctly."
+                )
 
-    # raw["token_logprobs"] is a list[float], raw["tokens"] is a list[str]
-    logprobs = raw.get("token_logprobs", [])
-    tokens   = raw.get("tokens", [])
+            # raw["token_logprobs"] is a list[float], raw["tokens"] is a list[str]
+            logprobs = raw.get("token_logprobs", [])
+            tokens   = raw.get("tokens", [])
 
-    # vLLM may return None for the first token logprob — filter those out
-    pairs    = [(lp, tok) for lp, tok in zip(logprobs, tokens) if lp is not None]
-    logprobs = [lp  for lp, _   in pairs]
-    tokens   = [tok for _,  tok in pairs]
+            # vLLM may return None for the first token logprob — filter those out
+            pairs    = [(lp, tok) for lp, tok in zip(logprobs, tokens) if lp is not None]
+            logprobs = [lp  for lp, _   in pairs]
+            tokens   = [tok for _,  tok in pairs]
 
-    return VLLMResult(
-        answer=answer,
-        logprobs=logprobs,
-        tokens=tokens,
-        model=model,
+            logger.info("vLLM generate OK: %d tokens, answer length %d chars",
+                        len(tokens), len(answer))
+
+            return VLLMResult(
+                answer=answer,
+                logprobs=logprobs,
+                tokens=tokens,
+                model=model,
+            )
+
+        except requests.exceptions.ConnectionError as e:
+            last_error = e
+            logger.warning(
+                "vLLM connection failed (attempt %d/%d): %s",
+                attempt, VLLM_RETRY_ATTEMPTS, e
+            )
+            if attempt < VLLM_RETRY_ATTEMPTS:
+                logger.info("Retrying in %ds...", VLLM_RETRY_DELAY)
+                time.sleep(VLLM_RETRY_DELAY)
+
+    raise RuntimeError(
+        f"Cannot reach vLLM at {VLLM_BASE_URL} after {VLLM_RETRY_ATTEMPTS} attempts. "
+        "Start the server with: vllm serve <model> --port 8000"
     )
 
 

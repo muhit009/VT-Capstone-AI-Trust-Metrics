@@ -13,12 +13,15 @@ Usage (local dev, via dev/local_pipeline.py):
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Optional
 
 from .grounding_scorer        import grounding_scorer
 from .generation_confidence   import generation_confidence_scorer
 from .fusion                  import fuse, FusionResult
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -65,36 +68,48 @@ class ConfidenceEngine:
         -------
         ConfidenceResult
         """
+        logger.info("Scoring answer (%d chars) against %d chunks with %d logprobs",
+                    len(answer), len(chunks), len(logprobs))
+
         # --- Signal 1: Grounding Score --------------------------------------
         grounding_result = None
         grounding_score  = None
         try:
             grounding_result = grounding_scorer.compute(answer, chunks)
             grounding_score  = grounding_result.grounding_score
+            logger.info("Grounding score: %.4f (%d/%d claims supported)",
+                        grounding_score,
+                        grounding_result.supported_claims,
+                        grounding_result.num_claims)
         except Exception as e:
-            print(f"[ConfidenceEngine] Grounding scorer failed: {e}")
+            logger.error("Grounding scorer failed: %s", e, exc_info=True)
 
         # --- Signal 2: Generation Confidence --------------------------------
-        gen_result    = None
+        gen_result     = None
         gen_confidence = None
         try:
             gen_result     = generation_confidence_scorer.compute(logprobs)
             gen_confidence = gen_result.score
+            logger.info("Generation confidence: raw=%.4f normalized=%.4f level=%s",
+                        gen_result.raw_mean_prob, gen_confidence, gen_result.level)
         except Exception as e:
-            print(f"[ConfidenceEngine] Gen confidence scorer failed: {e}")
+            logger.error("Gen confidence scorer failed: %s", e, exc_info=True)
 
         # --- Fusion ---------------------------------------------------------
         fusion: FusionResult = fuse(grounding_score, gen_confidence)
+        logger.info("Fusion result: score=%d tier=%s degraded=%s",
+                    fusion.score, fusion.tier, fusion.degraded)
 
         # --- Build audit signals dict ---------------------------------------
         signals = {
-            "grounding_score":          grounding_score,
-            "grounding_num_claims":     grounding_result.num_claims if grounding_result else None,
-            "grounding_supported":      grounding_result.supported_claims if grounding_result else None,
-            "gen_confidence_raw":       gen_result.raw_mean_prob if gen_result else None,
+            "grounding_score":           grounding_score,
+            "grounding_num_claims":      grounding_result.num_claims if grounding_result else None,
+            "grounding_supported":       grounding_result.supported_claims if grounding_result else None,
+            "gen_confidence_raw":        gen_result.raw_mean_prob if gen_result else None,
             "gen_confidence_normalized": gen_confidence,
-            "grounding_contribution":   fusion.grounding_contribution,
-            "gen_conf_contribution":    fusion.gen_conf_contribution,
+            "gen_confidence_level":      gen_result.level if gen_result else None,
+            "grounding_contribution":    fusion.grounding_contribution,
+            "gen_conf_contribution":     fusion.gen_conf_contribution,
         }
 
         return ConfidenceResult(

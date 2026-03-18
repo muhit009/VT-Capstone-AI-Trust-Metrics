@@ -39,6 +39,12 @@ GEN_CONF_HIGHLY_CONFIDENT_THRESHOLD = 0.8   # raw_mean > 0.8 → HIGHLY_CONFIDEN
 GEN_CONF_MODERATE_THRESHOLD         = 0.5   # raw_mean > 0.5 → MODERATE, else UNCERTAIN
 
 # ---------------------------------------------------------------------------
+# vLLM retry settings
+# ---------------------------------------------------------------------------
+VLLM_RETRY_ATTEMPTS = 3     # number of retry attempts on connection failure
+VLLM_RETRY_DELAY    = 5     # seconds to wait between retries
+
+# ---------------------------------------------------------------------------
 # Fusion
 # ---------------------------------------------------------------------------
 WEIGHT_GROUNDING   = 0.70
