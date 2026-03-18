@@ -1,0 +1,44 @@
+# -------------------------------------------------------
+# One-time setup for confidence-develop (Windows)
+# Run these from the confidence-develop folder
+# -------------------------------------------------------
+
+# 1. Create virtual environment
+python -m venv venv
+
+# 2. Activate it
+.\venv\Scripts\activate
+
+# 3. Upgrade pip
+python -m pip install --upgrade pip
+
+# 4. Install dependencies
+pip install -r requirements.txt
+
+# -------------------------------------------------------
+# Install Ollama (one-time, system-level)
+# -------------------------------------------------------
+# Download and run the Windows installer from:
+#   https://ollama.com/download/windows
+#
+# After installation, pull the model (4.1 GB):
+#   ollama pull mistral:7b-instruct
+#
+# Ollama runs as a background service automatically after install.
+# To start it manually if needed:
+#   ollama serve
+
+# -------------------------------------------------------
+# Run the local dev pipeline
+# -------------------------------------------------------
+# Make sure venv is activated, then:
+python dev/local_pipeline.py
+# Or pass a custom query:
+python dev/local_pipeline.py "What are the structural load requirements for launch vehicles?"
+
+# -------------------------------------------------------
+# If you have the backend's ChromaDB locally
+# -------------------------------------------------------
+# In dev/local_pipeline.py, set:
+#   BACKEND_CHROMA_PATH = "../backend/backend/chroma_db"
+# This will retrieve real chunks from the ingested PDFs.

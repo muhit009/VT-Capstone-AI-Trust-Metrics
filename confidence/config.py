@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# Ollama (local dev)
+# Ollama (local dev only)
 # ---------------------------------------------------------------------------
 OLLAMA_BASE_URL = "http://localhost:11434"
 OLLAMA_MODEL    = "mistral:7b-instruct"   # ~4.1 GB VRAM on RTX 3060 Ti
@@ -7,6 +7,18 @@ OLLAMA_TIMEOUT  = 120                     # seconds
 OLLAMA_OPTIONS  = {
     "temperature": 0,   # deterministic — required for audit trail
     "seed": 42,
+}
+
+# ---------------------------------------------------------------------------
+# vLLM (HPC — VT ARC Falcon / TinkerCliffs)
+# ---------------------------------------------------------------------------
+VLLM_BASE_URL = "http://localhost:8000"
+VLLM_MODEL    = "/common/data/models/mistralai--Mistral-Small-3.1-24B-Instruct-2503"
+VLLM_TIMEOUT  = 120                       # seconds
+VLLM_OPTIONS  = {
+    "temperature": 0,   # deterministic — required for audit trail
+    "seed":        42,
+    "max_tokens":  512,
 }
 
 # ---------------------------------------------------------------------------
