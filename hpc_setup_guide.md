@@ -1,16 +1,17 @@
 # VT ARC HPC Setup Guide — GroundCheck Confidence Engine
 
 **Document ID:** `hpc_setup_guide.md`
-**Version:** 1.0
+**Version:** 1.1
 **Authors:** Confidence Engine (Xuhui & Muhit)
 **Last Updated:** 2026-03-18
-**Cluster:** VT ARC (Falcon + TinkerCliffs)
+**Cluster:** VT ARC Falcon (L40S GPU)
 **Project:** GroundCheck — RAG Confidence Scoring for Boeing Engineering Documents
 
 ---
 
 ## Table of Contents
 
+0. [Teammate Quick Start — Use the Shared vLLM Server](#0-teammate-quick-start--use-the-shared-vllm-server)
 1. [Before You Start](#1-before-you-start)
 2. [Step 1 — Connect to VT VPN](#2-step-1--connect-to-vt-vpn)
 3. [Step 2 — Find Your Allocation Name](#3-step-2--find-your-allocation-name)
@@ -23,6 +24,179 @@
 10. [Step 9 — Run a Test Inference](#10-step-9--run-a-test-inference)
 11. [Step 10 — Submit a Batch Job](#11-step-10--submit-a-batch-job)
 12. [Quick Reference](#12-quick-reference)
+
+---
+
+## 0. Teammate Quick Start — Use the Shared vLLM Server
+
+> **This section is for teammates who want to run queries against the model.** You do not need to set up Ollama, download models, or configure a GPU session. The model (`Mistral-Small-3.1-24B-Instruct`) is already served by vLLM on a shared GPU node. You just need to connect and run.
+
+---
+
+### Step 0.1 — Connect to VT VPN
+
+You cannot access ARC without the VT VPN.
+
+1. Open **Cisco AnyConnect** (download from https://www.vt.edu/its/software.html if needed)
+2. Connect to `vpn.vt.edu`
+3. Log in with your VT PID, password, and Duo 2FA
+
+---
+
+### Step 0.2 — Check If the Server Is Running
+
+Before connecting, verify the server is active. Ask the person who started it (Muhit) which node it is on. Then:
+
+```bash
+# SSH into the HPC login node
+ssh <your-pid>@falcon1.arc.vt.edu
+
+# Check if the server is running on the expected node (e.g., fal039)
+curl http://fal039:8000/health
+```
+
+- **Response `{}`** → server is up, proceed to Step 0.4
+- **No response / connection refused** → server is down, go to Step 0.5 to restart it
+
+---
+
+### Step 0.3 — Find Which Node the Server Is On
+
+If you don't know the node name, check the Slurm job list:
+
+```bash
+squeue -u muhit009
+# Look at the NODELIST column — it will show something like "fal039"
+```
+
+Or if it is running as a batch job:
+
+```bash
+squeue -A muataz --name=vllm-server
+# Shows the node in the NODELIST column
+```
+
+---
+
+### Step 0.4 — Run the Pipeline (Server Is Up)
+
+```bash
+# 1. SSH into the login node (if not already there)
+ssh <your-pid>@falcon1.arc.vt.edu
+
+# 2. Activate the shared Python environment
+source /projects/meng/group23/envs/venv/bin/activate
+
+# 3. Go to the project folder
+cd /projects/meng/group23/confidence-develop
+
+# 4. Pull the latest code
+git pull
+
+# 5. Run a query — replace <node> with the actual node name (e.g., fal039)
+VLLM_BASE_URL=http://<node>:8000 python dev/hpc_pipeline.py "Your question here"
+```
+
+**Example:**
+```bash
+VLLM_BASE_URL=http://fal039:8000 python dev/hpc_pipeline.py "What is the purpose of a Preliminary Design Review in systems engineering?"
+```
+
+**Expected output:**
+```json
+{
+  "score": 99,
+  "tier": "HIGH",
+  "signals": {
+    "grounding_score": 0.980906,
+    "gen_confidence_raw": 0.96171,
+    "gen_confidence_normalized": 1.0
+  }
+}
+```
+
+---
+
+### Step 0.5 — Start the Server (If It Is Down)
+
+If the server is not running, any teammate with project access can restart it as a **batch job** that stays alive for 24 hours:
+
+```bash
+# SSH into the login node
+ssh <your-pid>@falcon1.arc.vt.edu
+
+# Submit the vLLM server as a batch job
+sbatch /projects/meng/group23/vllm_server.sh
+```
+
+If the batch script does not exist yet, create it first:
+
+```bash
+cat > /projects/meng/group23/vllm_server.sh << 'EOF'
+#!/bin/bash
+#SBATCH --job-name=vllm-server
+#SBATCH --account=muataz
+#SBATCH --partition=normal_q
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --mem=64G
+#SBATCH --time=24:00:00
+#SBATCH --output=/projects/meng/group23/logs/vllm_server_%j.log
+
+mkdir -p /projects/meng/group23/logs
+
+source /projects/meng/group23/envs/venv/bin/activate
+export HF_HOME=/projects/meng/group23/models/hf_cache
+
+vllm serve /common/data/models/mistralai--Mistral-Small-3.1-24B-Instruct-2503 \
+    --port 8000 \
+    --max-model-len 8192 \
+    --served-model-name mistral-small-24b \
+    --quantization fp8
+EOF
+
+mkdir -p /projects/meng/group23/logs
+sbatch /projects/meng/group23/vllm_server.sh
+```
+
+Then find the node:
+
+```bash
+squeue -A muataz --name=vllm-server
+# Wait ~3 minutes for the model to load, then check:
+curl http://<node>:8000/health
+```
+
+Once it returns `{}`, the server is ready. Share the node name with your teammates.
+
+---
+
+### Step 0.6 — Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `curl` hangs or times out | Server is still loading the model — wait 3–5 minutes and retry |
+| `connection refused` | Server is not running — follow Step 0.5 |
+| `404 model not found` | Model name mismatch — make sure you set `VLLM_BASE_URL` correctly |
+| `Device set to use cpu` warning | Normal — the NLI grounding scorer runs on CPU intentionally |
+| Session expired / server died | Interactive sessions time out — use the batch job (Step 0.5) instead |
+| `git pull` auth error | Use HTTPS with your GitHub personal access token |
+
+---
+
+### Step 0.7 — Check Server Logs
+
+If something is wrong, read the server log:
+
+```bash
+# For batch jobs:
+tail -f /projects/meng/group23/logs/vllm_server_<jobid>.log
+
+# For interactive sessions:
+cat /tmp/vllm_server.log
+```
 
 ---
 
