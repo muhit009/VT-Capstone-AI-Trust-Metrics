@@ -18,7 +18,12 @@ import math
 import requests
 from typing import TypedDict
 
-from .config import VLLM_BASE_URL, VLLM_MODEL, VLLM_TIMEOUT, VLLM_OPTIONS
+import os
+from .config import VLLM_BASE_URL as _VLLM_BASE_URL, VLLM_MODEL, VLLM_TIMEOUT, VLLM_OPTIONS
+
+# Allow overriding the base URL via environment variable
+# e.g. VLLM_BASE_URL=http://fal039:8000 python dev/hpc_pipeline.py
+VLLM_BASE_URL = os.environ.get("VLLM_BASE_URL", _VLLM_BASE_URL)
 
 
 class VLLMResult(TypedDict):
