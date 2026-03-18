@@ -25,7 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from confidence import confidence_engine
-from confidence.vllm_client import generate, health_check, list_models
+from confidence.vllm_client import generate, health_check
 from confidence.config import VLLM_MODEL, TOP_K_CHUNKS
 
 # ---------------------------------------------------------------------------
@@ -130,9 +130,6 @@ def run(query: str) -> None:
         print(f"      --model {VLLM_MODEL} \\")
         print(f"      --port 8000 --max-model-len 8192")
         sys.exit(1)
-
-    available = list_models()
-    print(f"[hpc_pipeline] vLLM serving: {available}\n")
 
     # 2. Retrieve chunks
     chunks = get_chunks(query)
