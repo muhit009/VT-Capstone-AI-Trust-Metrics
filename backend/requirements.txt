@@ -20,3 +20,4 @@ pytest
 python-multipart
 langchain-core
 langchain
+nltk
