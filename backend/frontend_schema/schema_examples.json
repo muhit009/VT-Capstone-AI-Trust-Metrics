@@ -1,0 +1,312 @@
+{
+  "$comment": "GroundCheck API schema_examples.json v1.0.0 — canonical examples for all response scenarios. Tier thresholds match confidence/config.py: HIGH>=70, MEDIUM>=40, LOW<40.",
+  "examples": {
+
+    "success_high_confidence": {
+      "$comment": "Both signals available. Grounding=0.95, GenConf=0.82 → score=round(0.95*70 + 0.82*30)=91 → HIGH.",
+      "query_id": "q_20260315_143210_abc123",
+      "query": "What is the minimum yield strength for ASTM A36 steel?",
+      "answer": "The minimum yield strength for ASTM A36 steel is 36,000 psi (250 MPa) per ASTM specification A36/A36M.",
+      "confidence": {
+        "final_score": 91,
+        "tier": "HIGH",
+        "signals": {
+          "grounding_score": 0.95,
+          "generation_confidence": 0.82
+        },
+        "weights": {
+          "grounding": 0.7,
+          "generation": 0.3
+        },
+        "explanation": "HIGH confidence (score=91). Grounding score: 0.95 (NLI document support). Generation confidence: 0.82 (mean token probability).",
+        "warnings": null,
+        "degraded": false
+      },
+      "citations": [
+        {
+          "citation_id": "nasa_handbook_pdf__chunk_3",
+          "document": "Materials_Handbook.pdf",
+          "page": 12,
+          "section": "Table 3-1: Steel Specifications",
+          "chunk_id": "Materials_Handbook.pdf__chunk_3",
+          "similarity_score": 0.94,
+          "entailment_score": 0.97,
+          "text_excerpt": "ASTM A36 steel has a minimum yield strength of 36 ksi (250 MPa) as defined in ASTM A36/A36M."
+        },
+        {
+          "citation_id": "structural_guide_pdf__chunk_89",
+          "document": "Structural_Assembly_Guide.pdf",
+          "page": 67,
+          "section": "Chapter 5: Material Requirements",
+          "chunk_id": "Structural_Assembly_Guide.pdf__chunk_89",
+          "similarity_score": 0.87,
+          "entailment_score": 0.89,
+          "text_excerpt": "For structural applications, A36 steel minimum yield: 250 MPa per ASTM specification."
+        }
+      ],
+      "metadata": {
+        "model": "mistralai/Mistral-7B-Instruct-v0.2",
+        "nli_model": "cross-encoder/nli-deberta-v3-small",
+        "timestamp": "2026-03-15T14:32:10Z",
+        "processing_time_ms": 1247,
+        "retrieved_chunks": 5,
+        "schema_version": "1.0.0"
+      },
+      "status": "success"
+    },
+
+    "success_medium_confidence": {
+      "$comment": "Both signals available but answer only partially supported. Score falls in MEDIUM range (40–69).",
+      "query_id": "q_20260315_150000_bcd234",
+      "query": "What is the recommended torque for M10 bolts in aluminum assemblies?",
+      "answer": "For M10 bolts in aluminum assemblies, typical torque values range from 25–35 Nm depending on coating and friction coefficient.",
+      "confidence": {
+        "final_score": 63,
+        "tier": "MEDIUM",
+        "signals": {
+          "grounding_score": 0.71,
+          "generation_confidence": 0.45
+        },
+        "weights": {
+          "grounding": 0.7,
+          "generation": 0.3
+        },
+        "explanation": "MEDIUM confidence (score=63). Grounding score: 0.71 (NLI document support). Generation confidence: 0.45 (mean token probability).",
+        "warnings": null,
+        "degraded": false
+      },
+      "citations": [
+        {
+          "citation_id": "fastener_specs_pdf__chunk_11",
+          "document": "Fastener_Specifications.pdf",
+          "page": 34,
+          "section": "Section 4.2: Metric Fastener Torque Tables",
+          "chunk_id": "Fastener_Specifications.pdf__chunk_11",
+          "similarity_score": 0.76,
+          "entailment_score": 0.68,
+          "text_excerpt": "M10 bolts in anodized aluminum joints: recommended torque 28–33 Nm (dry). Adjust for lubricated conditions."
+        }
+      ],
+      "metadata": {
+        "model": "mistralai/Mistral-7B-Instruct-v0.2",
+        "nli_model": "cross-encoder/nli-deberta-v3-small",
+        "timestamp": "2026-03-15T15:00:00Z",
+        "processing_time_ms": 1089,
+        "retrieved_chunks": 5,
+        "schema_version": "1.0.0"
+      },
+      "status": "success"
+    },
+
+    "success_low_confidence": {
+      "$comment": "Both signals available but answer is poorly supported. Score <40 → LOW.",
+      "query_id": "q_20260315_151500_cde345",
+      "query": "What is the fatigue life of Grade 5 titanium at 800°C?",
+      "answer": "The fatigue life of Grade 5 titanium at 800°C is significantly reduced compared to room temperature, but exact values depend on loading conditions and surface treatment.",
+      "confidence": {
+        "final_score": 28,
+        "tier": "LOW",
+        "signals": {
+          "grounding_score": 0.22,
+          "generation_confidence": 0.38
+        },
+        "weights": {
+          "grounding": 0.7,
+          "generation": 0.3
+        },
+        "explanation": "LOW confidence (score=28). Grounding score: 0.22 (NLI document support). Generation confidence: 0.38 (mean token probability).",
+        "warnings": null,
+        "degraded": false
+      },
+      "citations": [
+        {
+          "citation_id": "aerospace_materials_pdf__chunk_44",
+          "document": "Aerospace_Materials_Overview.pdf",
+          "page": 102,
+          "section": "Chapter 8: Titanium Alloys",
+          "chunk_id": "Aerospace_Materials_Overview.pdf__chunk_44",
+          "similarity_score": 0.48,
+          "entailment_score": 0.21,
+          "text_excerpt": "Titanium alloys generally exhibit reduced ductility and fatigue resistance at temperatures exceeding 600°C."
+        }
+      ],
+      "metadata": {
+        "model": "mistralai/Mistral-7B-Instruct-v0.2",
+        "nli_model": "cross-encoder/nli-deberta-v3-small",
+        "timestamp": "2026-03-15T15:15:00Z",
+        "processing_time_ms": 1411,
+        "retrieved_chunks": 3,
+        "schema_version": "1.0.0"
+      },
+      "status": "success"
+    },
+
+    "error_no_documents": {
+      "$comment": "No relevant documents found in ChromaDB. No answer produced. status=error.",
+      "query_id": "q_20260315_143500_def456",
+      "query": "What is the torque spec for M8 bolts?",
+      "answer": null,
+      "confidence": {
+        "final_score": 0,
+        "tier": "LOW",
+        "signals": {
+          "grounding_score": null,
+          "generation_confidence": null
+        },
+        "explanation": "No answer generated.",
+        "warnings": ["No answer produced — confidence score unavailable."],
+        "degraded": true
+      },
+      "citations": [],
+      "error": {
+        "code": "NO_RELEVANT_DOCUMENTS",
+        "message": "No documents found matching the query. Please upload relevant documentation.",
+        "severity": "error"
+      },
+      "metadata": {
+        "model": "mistralai/Mistral-7B-Instruct-v0.2",
+        "nli_model": null,
+        "timestamp": "2026-03-15T14:35:00Z",
+        "processing_time_ms": 234,
+        "retrieved_chunks": 0,
+        "schema_version": "1.0.0"
+      },
+      "status": "error"
+    },
+
+    "partial_success_generation_confidence_unavailable": {
+      "$comment": "Answer produced, grounding available, but logprobs were empty so generation_confidence=null. Degraded mode: grounding weight=1.0. status=partial_success.",
+      "query_id": "q_20260315_143800_ghi789",
+      "query": "What are the safety procedures for hydraulic press shutdown?",
+      "answer": "Emergency shutdown: 1) Press E-Stop button, 2) Close valve V-12, 3) Notify supervisor.",
+      "confidence": {
+        "final_score": 95,
+        "tier": "HIGH",
+        "signals": {
+          "grounding_score": 0.95,
+          "generation_confidence": null
+        },
+        "weights": {
+          "grounding": 1.0,
+          "generation": 0.0
+        },
+        "explanation": "HIGH confidence (score=95). Grounding score: 0.95 (NLI document support). Generation confidence: unavailable. Degraded mode: Generation confidence unavailable. Using Grounding Score only.",
+        "warnings": ["Generation confidence unavailable. Using Grounding Score only."],
+        "degraded": true
+      },
+      "citations": [
+        {
+          "citation_id": "safety_manual_pdf__chunk_12",
+          "document": "Safety_Manual.pdf",
+          "page": 45,
+          "section": "Section 6.3: Emergency Shutdown Procedures",
+          "chunk_id": "Safety_Manual.pdf__chunk_12",
+          "similarity_score": 0.92,
+          "entailment_score": 0.95,
+          "text_excerpt": "Emergency shutdown procedure: Press E-Stop, close valve V-12, notify supervisor immediately."
+        }
+      ],
+      "error": {
+        "code": "GENERATION_CONFIDENCE_UNAVAILABLE",
+        "message": "Generation confidence unavailable. Using Grounding Score only.",
+        "severity": "warning"
+      },
+      "metadata": {
+        "model": "mistralai/Mistral-7B-Instruct-v0.2",
+        "nli_model": "cross-encoder/nli-deberta-v3-small",
+        "timestamp": "2026-03-15T14:38:00Z",
+        "processing_time_ms": 1543,
+        "retrieved_chunks": 4,
+        "schema_version": "1.0.0"
+      },
+      "status": "partial_success"
+    },
+
+    "edge_case_generation_failure": {
+      "$comment": "Documents were retrieved but LLM returned empty string. status=error.",
+      "query_id": "q_20260315_160000_jkl012",
+      "query": "What is the pressure rating for Schedule 40 PVC pipe at 23°C?",
+      "answer": null,
+      "confidence": {
+        "final_score": 0,
+        "tier": "LOW",
+        "signals": {
+          "grounding_score": null,
+          "generation_confidence": null
+        },
+        "explanation": "No answer generated.",
+        "warnings": ["No answer produced — confidence score unavailable."],
+        "degraded": true
+      },
+      "citations": [],
+      "error": {
+        "code": "GENERATION_FAILURE",
+        "message": "The LLM returned an empty response. Documents were retrieved but generation failed.",
+        "severity": "error",
+        "details": "Empty string received from model after 3 retry attempts."
+      },
+      "metadata": {
+        "model": "mistralai/Mistral-7B-Instruct-v0.2",
+        "nli_model": null,
+        "timestamp": "2026-03-15T16:00:00Z",
+        "processing_time_ms": 3201,
+        "retrieved_chunks": 5,
+        "schema_version": "1.0.0"
+      },
+      "status": "error"
+    },
+
+    "edge_case_conflicting_documents": {
+      "$comment": "Retrieved documents contain conflicting information. Low grounding score despite retrieval. Both signals available but score is LOW.",
+      "query_id": "q_20260315_161500_mno345",
+      "query": "What is the maximum operating temperature for Viton O-rings?",
+      "answer": "Viton O-rings have a maximum operating temperature typically cited between 200°C and 232°C, depending on compound grade and exposure duration.",
+      "confidence": {
+        "final_score": 37,
+        "tier": "LOW",
+        "signals": {
+          "grounding_score": 0.38,
+          "generation_confidence": 0.61
+        },
+        "weights": {
+          "grounding": 0.7,
+          "generation": 0.3
+        },
+        "explanation": "LOW confidence (score=37). Grounding score: 0.38 (NLI document support). Generation confidence: 0.61 (mean token probability).",
+        "warnings": null,
+        "degraded": false
+      },
+      "citations": [
+        {
+          "citation_id": "sealing_materials_pdf__chunk_5",
+          "document": "Sealing_Materials_Guide.pdf",
+          "page": 23,
+          "section": "Fluorocarbon Elastomers",
+          "chunk_id": "Sealing_Materials_Guide.pdf__chunk_5",
+          "similarity_score": 0.85,
+          "entailment_score": 0.41,
+          "text_excerpt": "Viton FKM O-rings: maximum continuous operating temperature 200°C (392°F)."
+        },
+        {
+          "citation_id": "oem_sealing_spec_pdf__chunk_18",
+          "document": "OEM_Sealing_Specification_Rev3.pdf",
+          "page": 7,
+          "section": "Approved Materials List",
+          "chunk_id": "OEM_Sealing_Specification_Rev3.pdf__chunk_18",
+          "similarity_score": 0.81,
+          "entailment_score": 0.34,
+          "text_excerpt": "Fluorocarbon seals (Viton GF-S): max operating temperature 232°C per OEM specification."
+        }
+      ],
+      "metadata": {
+        "model": "mistralai/Mistral-7B-Instruct-v0.2",
+        "nli_model": "cross-encoder/nli-deberta-v3-small",
+        "timestamp": "2026-03-15T16:15:00Z",
+        "processing_time_ms": 1876,
+        "retrieved_chunks": 5,
+        "schema_version": "1.0.0"
+      },
+      "status": "success"
+    }
+  }
+}

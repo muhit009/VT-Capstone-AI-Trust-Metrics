@@ -1,0 +1,588 @@
+openapi: 3.1.0
+info:
+  title: GroundCheck Confidence API
+  version: 1.0.0
+  description: |
+    GroundCheck is a confidence-scoring engine for RAG-based enterprise AI systems.
+    It fuses two independent signals into a single calibrated 0–100 confidence score.
+
+    ## Confidence Signals
+
+    | Signal | Weight | Source |
+    |---|---|---|
+    | `grounding_score` | 0.70 | DeBERTa-v3-small NLI entailment against retrieved chunks |
+    | `generation_confidence` | 0.30 | Normalized mean token log-probability from the LLM |
+
+    **Fusion formula:**
+    ```
+    final_score = round((grounding_score × 0.70 + generation_confidence × 0.30) × 100)
+    ```
+
+    **Tier thresholds (from `confidence/config.py`):**
+    | Tier | Range |
+    |---|---|
+    | HIGH | ≥ 70 |
+    | MEDIUM | 40 – 69 |
+    | LOW | < 40 |
+
+    ## Graceful Degradation
+    If one signal is unavailable, the other receives full weight (1.0).
+    Response `status` becomes `partial_success` and an `error` field explains which signal failed.
+
+  contact:
+    name: VT Capstone 2026 — Backend Team (Shashwat & Torrin)
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+
+  /v1/rag/query:
+    post:
+      operationId: ragQuery
+      summary: Full RAG pipeline — returns GroundCheckResponse
+      description: |
+        Accepts a user query, retrieves relevant document chunks from ChromaDB,
+        generates an answer via the LLM, scores confidence using both signals,
+        and returns a fully structured GroundCheckResponse.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RAGInferenceRequest'
+            examples:
+              basic:
+                summary: Simple engineering query
+                value:
+                  query: "What is the minimum yield strength for ASTM A36 steel?"
+                  top_k: 5
+      responses:
+        '200':
+          description: Pipeline completed. Status may be success, partial_success, or error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroundCheckResponse'
+              examples:
+                high_confidence:
+                  $ref: '#/components/examples/HighConfidenceSuccess'
+                partial_success:
+                  $ref: '#/components/examples/PartialSuccess'
+                error:
+                  $ref: '#/components/examples/ErrorNoDocuments'
+        '422':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '503':
+          description: Model service not loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
+
+  /v1/predict:
+    post:
+      operationId: predict
+      summary: Raw LLM inference — returns InferenceResponse
+      description: |
+        Direct LLM inference without RAG retrieval or confidence scoring.
+        Use for testing the model service in isolation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InferenceRequest'
+      responses:
+        '200':
+          description: Inference completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InferenceResponse'
+        '500':
+          description: Inference error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
+
+  /v1/health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  model:
+                    type: string
+                    example: mistralai/Mistral-7B-Instruct-v0.2
+
+  /v1/documents/upload:
+    post:
+      operationId: uploadDocument
+      summary: Upload and ingest a document into ChromaDB
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PDF or TXT file (max 50MB)
+      responses:
+        '200':
+          description: Document ingested successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestionResult'
+        '400':
+          description: Invalid file type, empty file, or file too large
+        '422':
+          description: Text extraction failed
+
+  /v1/documents/:
+    get:
+      operationId: listDocuments
+      summary: List all ingested documents
+      responses:
+        '200':
+          description: List of document filenames in the vector store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documents:
+                    type: array
+                    items:
+                      type: string
+                  total:
+                    type: integer
+
+  /v1/documents/{filename}:
+    delete:
+      operationId: deleteDocument
+      summary: Delete a document and all its chunks from ChromaDB
+      parameters:
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Document deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filename:
+                    type: string
+                  chunks_deleted:
+                    type: integer
+                  status:
+                    type: string
+                    example: deleted
+        '404':
+          description: Document not found in vector store
+
+components:
+  schemas:
+
+    RAGInferenceRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: User's natural language question.
+          example: "What is the minimum yield strength for ASTM A36 steel?"
+        top_k:
+          type: integer
+          default: 5
+          description: Number of document chunks to retrieve from ChromaDB.
+        max_new_tokens:
+          type: integer
+          default: 256
+        temperature:
+          type: number
+          default: 0.7
+        top_p:
+          type: number
+          default: 0.9
+        repetition_penalty:
+          type: number
+          default: 1.1
+
+    InferenceRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+          description: Full prompt string passed directly to the LLM.
+        max_new_tokens:
+          type: integer
+          default: 128
+        temperature:
+          type: number
+          default: 0.7
+        top_p:
+          type: number
+          default: 0.9
+        repetition_penalty:
+          type: number
+          default: 1.1
+        no_repeat_ngram_size:
+          type: integer
+          default: 3
+
+    InferenceResponse:
+      type: object
+      properties:
+        model_name:
+          type: string
+        generated_text:
+          type: string
+        confidence:
+          type: object
+          properties:
+            score:
+              type: number
+            method:
+              type: string
+            explanation:
+              type: string
+        metadata:
+          type: object
+
+    GroundCheckResponse:
+      type: object
+      required: [query_id, query, answer, confidence, citations, metadata, status]
+      description: Root GroundCheck API response (schema v1.0.0).
+      properties:
+        query_id:
+          type: string
+          pattern: '^q_\d{8}_\d{6}_[a-z0-9]{6}$'
+          description: Unique query identifier. Format q_YYYYMMDD_HHMMSS_<6hex>.
+        query:
+          type: string
+          description: Original user query.
+        answer:
+          type: [string, "null"]
+          description: LLM-generated answer. Null on error.
+        confidence:
+          $ref: '#/components/schemas/ConfidenceData'
+        citations:
+          type: array
+          items:
+            $ref: '#/components/schemas/CitationModel'
+        metadata:
+          $ref: '#/components/schemas/ResponseMetadata'
+        error:
+          $ref: '#/components/schemas/ErrorInfo'
+        status:
+          type: string
+          enum: [success, partial_success, error]
+
+    ConfidenceData:
+      type: object
+      required: [final_score, tier, signals, explanation, degraded]
+      properties:
+        final_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: "Fused score. Formula: round((grounding×0.7 + gen_conf×0.3)×100)."
+        tier:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+          description: HIGH>=70, MEDIUM>=40, LOW<40.
+        signals:
+          $ref: '#/components/schemas/ConfidenceSignals'
+        weights:
+          $ref: '#/components/schemas/FusionWeights'
+        explanation:
+          type: string
+          description: Human-readable explanation of the score.
+        warnings:
+          type: [array, "null"]
+          items:
+            type: string
+          description: Present only on partial_success.
+        degraded:
+          type: boolean
+          description: True when one or both signals were unavailable.
+
+    ConfidenceSignals:
+      type: object
+      required: [grounding_score, generation_confidence]
+      properties:
+        grounding_score:
+          type: [number, "null"]
+          minimum: 0.0
+          maximum: 1.0
+          description: NLI entailment score (0–1). Null if grounding scorer failed.
+        generation_confidence:
+          type: [number, "null"]
+          minimum: 0.0
+          maximum: 1.0
+          description: Normalized mean token log-probability (0–1). Null if logprobs unavailable.
+
+    FusionWeights:
+      type: object
+      required: [grounding, generation]
+      properties:
+        grounding:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: Default 0.7. Set to 1.0 in degraded mode when generation_confidence is null.
+        generation:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: Default 0.3. Set to 0.0 in degraded mode when generation_confidence is null.
+
+    CitationModel:
+      type: object
+      required: [citation_id, document, chunk_id, similarity_score, text_excerpt]
+      properties:
+        citation_id:
+          type: string
+          description: Stable ID. Format <source_slug>__chunk_<N>.
+        document:
+          type: string
+          description: Source document filename.
+        page:
+          type: [integer, "null"]
+          minimum: 1
+          description: 1-indexed page number.
+        section:
+          type: [string, "null"]
+          description: Section heading if available.
+        chunk_id:
+          type: string
+          description: Internal ChromaDB chunk ID.
+        similarity_score:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: Cosine similarity between query and chunk (0–1).
+        entailment_score:
+          type: [number, "null"]
+          minimum: 0.0
+          maximum: 1.0
+          description: NLI entailment probability from grounding scorer. Null if not run.
+        text_excerpt:
+          type: string
+          description: Chunk text preview ~300 chars.
+
+    ResponseMetadata:
+      type: object
+      required: [model, timestamp, processing_time_ms]
+      properties:
+        model:
+          type: string
+          description: LLM identifier.
+          example: mistralai/Mistral-7B-Instruct-v0.2
+        nli_model:
+          type: [string, "null"]
+          description: NLI model identifier. Null if grounding scorer not run.
+          example: cross-encoder/nli-deberta-v3-small
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp.
+        processing_time_ms:
+          type: integer
+          minimum: 0
+          description: Total wall-clock time in milliseconds.
+        retrieved_chunks:
+          type: [integer, "null"]
+          minimum: 0
+          description: Chunks retrieved from ChromaDB before filtering.
+        schema_version:
+          type: string
+          default: "1.0.0"
+
+    ErrorInfo:
+      type: object
+      required: [code, message, severity]
+      properties:
+        code:
+          type: string
+          enum:
+            - NO_RELEVANT_DOCUMENTS
+            - RETRIEVAL_FAILURE
+            - GENERATION_FAILURE
+            - NLI_FAILURE
+            - GENERATION_CONFIDENCE_UNAVAILABLE
+            - TIMEOUT
+            - INVALID_QUERY
+            - INTERNAL_ERROR
+        message:
+          type: string
+        severity:
+          type: string
+          enum: [warning, error]
+        details:
+          type: [string, "null"]
+
+    IngestionResult:
+      type: object
+      properties:
+        filename:
+          type: string
+        file_type:
+          type: string
+          enum: [pdf, txt]
+        page_count:
+          type: integer
+        chunk_count:
+          type: integer
+        embedding_dim:
+          type: integer
+        status:
+          type: string
+          example: ingested
+
+    ValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+
+    HTTPError:
+      type: object
+      properties:
+        detail:
+          type: string
+
+  examples:
+    HighConfidenceSuccess:
+      summary: HIGH confidence — both signals available
+      value:
+        query_id: "q_20260315_143210_abc123"
+        query: "What is the minimum yield strength for ASTM A36 steel?"
+        answer: "The minimum yield strength for ASTM A36 steel is 36,000 psi (250 MPa)."
+        confidence:
+          final_score: 91
+          tier: "HIGH"
+          signals:
+            grounding_score: 0.95
+            generation_confidence: 0.82
+          weights:
+            grounding: 0.7
+            generation: 0.3
+          explanation: "HIGH confidence (score=91). Grounding score: 0.95. Generation confidence: 0.82."
+          warnings: null
+          degraded: false
+        citations:
+          - citation_id: "nasa_handbook_pdf__chunk_3"
+            document: "Materials_Handbook.pdf"
+            page: 12
+            section: "Table 3-1: Steel Specifications"
+            chunk_id: "Materials_Handbook.pdf__chunk_3"
+            similarity_score: 0.94
+            entailment_score: 0.97
+            text_excerpt: "ASTM A36 steel has a minimum yield strength of 36 ksi (250 MPa)."
+        metadata:
+          model: "mistralai/Mistral-7B-Instruct-v0.2"
+          nli_model: "cross-encoder/nli-deberta-v3-small"
+          timestamp: "2026-03-15T14:32:10Z"
+          processing_time_ms: 1247
+          retrieved_chunks: 5
+          schema_version: "1.0.0"
+        status: "success"
+
+    PartialSuccess:
+      summary: Partial success — generation confidence unavailable
+      value:
+        query_id: "q_20260315_143800_ghi789"
+        query: "What are the safety procedures for hydraulic press shutdown?"
+        answer: "Emergency shutdown: 1) Press E-Stop, 2) Close valve V-12, 3) Notify supervisor."
+        confidence:
+          final_score: 95
+          tier: "HIGH"
+          signals:
+            grounding_score: 0.95
+            generation_confidence: null
+          weights:
+            grounding: 1.0
+            generation: 0.0
+          explanation: "HIGH confidence (score=95). Grounding score: 0.95. Generation confidence: unavailable. Degraded mode: Generation confidence unavailable. Using Grounding Score only."
+          warnings: ["Generation confidence unavailable. Using Grounding Score only."]
+          degraded: true
+        citations:
+          - citation_id: "safety_manual_pdf__chunk_12"
+            document: "Safety_Manual.pdf"
+            page: 45
+            chunk_id: "Safety_Manual.pdf__chunk_12"
+            similarity_score: 0.92
+            entailment_score: 0.95
+            text_excerpt: "Emergency shutdown: Press E-Stop, close V-12, notify supervisor."
+        error:
+          code: "GENERATION_CONFIDENCE_UNAVAILABLE"
+          message: "Generation confidence unavailable. Using Grounding Score only."
+          severity: "warning"
+        metadata:
+          model: "mistralai/Mistral-7B-Instruct-v0.2"
+          nli_model: "cross-encoder/nli-deberta-v3-small"
+          timestamp: "2026-03-15T14:38:00Z"
+          processing_time_ms: 1543
+          retrieved_chunks: 4
+          schema_version: "1.0.0"
+        status: "partial_success"
+
+    ErrorNoDocuments:
+      summary: Error — no relevant documents found
+      value:
+        query_id: "q_20260315_143500_def456"
+        query: "What is the torque spec for M8 bolts?"
+        answer: null
+        confidence:
+          final_score: 0
+          tier: "LOW"
+          signals:
+            grounding_score: null
+            generation_confidence: null
+          explanation: "No answer generated."
+          warnings: ["No answer produced — confidence score unavailable."]
+          degraded: true
+        citations: []
+        error:
+          code: "NO_RELEVANT_DOCUMENTS"
+          message: "No documents found matching the query. Please upload relevant documentation."
+          severity: "error"
+        metadata:
+          model: "mistralai/Mistral-7B-Instruct-v0.2"
+          nli_model: null
+          timestamp: "2026-03-15T14:35:00Z"
+          processing_time_ms: 234
+          retrieved_chunks: 0
+          schema_version: "1.0.0"
+        status: "error"
