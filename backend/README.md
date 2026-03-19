@@ -1,7 +1,6 @@
-# GroundCheck — Backend
+# Backend
 
 Virginia Tech Capstone 2026 · Backend Sub-system  
-**Team:** Shashwat & Torrin
 
 ---
 
