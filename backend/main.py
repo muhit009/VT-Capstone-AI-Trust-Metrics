@@ -2,11 +2,24 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import inference, documents
+from contextlib import asynccontextmanager
+
+# Use lifespan to host the app
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+
+    # Wire model service into RAG orchestrator
+    from rag_orchestrator import rag_orchestrator
+    from services.model_service import model_executor
+    rag_orchestrator._model_svc = model_executor
+
+    yield # app is running
 
 app = FastAPI(
     title="Enterprise AI Confidence API",
     description="Standardized inference wrapper for LLMs",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS Configuration

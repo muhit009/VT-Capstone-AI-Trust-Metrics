@@ -18,3 +18,5 @@ langchain-text-splitters
 chromadb
 pytest
 python-multipart
+langchain-core
+langchain
