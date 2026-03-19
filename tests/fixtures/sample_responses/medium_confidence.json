@@ -1,0 +1,107 @@
+{
+  "_meta": {
+    "description": "Sample MEDIUM confidence response — hydraulic press emergency shutdown query",
+    "tier": "MEDIUM",
+    "score_range": "40–69",
+    "confidence_model_version": "confidence_model.md v1.1",
+    "api_schema_version": "1.0.0",
+    "source": "Derived from confidence_model.md Worked Example 2"
+  },
+
+  "_test_input": {
+    "chunks": [
+      "Emergency Stop (E-STOP): Press the red E-STOP button on the main control panel to cut power to all hydraulic actuators.",
+      "Hydraulic shutdown: After E-STOP, turn the main hydraulic valve (V-01) to CLOSED and verify system pressure gauge reads zero.",
+      "Before opening the hydraulic press access panel, confirm zero system pressure using PG-01.",
+      "General Safety Procedures Section 12: All personnel must wear appropriate PPE when working near hydraulic systems.",
+      "Equipment Maintenance Log: Hydraulic press (HP-3) last serviced 2026-01-15."
+    ],
+    "logprobs": [
+      -0.25, -0.25, -0.25, -0.25, -0.25, -0.25, -0.25, -0.25, -0.25, -0.25,
+      -0.70, -0.70, -0.70, -0.70, -0.70, -0.70, -0.70, -0.70, -0.70, -0.70
+    ],
+    "_logprob_note": "20 tokens: 10 at ln(0.779)≈-0.25 (common procedural words), 10 at ln(0.497)≈-0.70 (technical terms/numbers). Mean token prob ≈ 0.638."
+  },
+
+  "_score_derivation": {
+    "grounding_norm": "0.60 (3/5 claims supported)",
+    "gen_conf_raw": 0.638,
+    "gen_conf_norm": "(0.638 - 0.3) / 0.6 = 0.563",
+    "fusion": "round((0.7 × 0.60 + 0.3 × 0.563) × 100) = round(58.9) = 59",
+    "tier_check": "40 ≤ 59 < 70 → MEDIUM",
+    "unsupported_claims": [
+      "Complete incident report form HSE-204 within 2 hours — not in retrieved chunks",
+      "Notify the shift supervisor before resuming — not in retrieved chunks"
+    ]
+  },
+
+  "query_id": "q_20260319_150031_bcd234",
+  "query": "What is the emergency shutdown procedure for the hydraulic press?",
+  "answer": "Emergency shutdown: 1) Press the red E-STOP button on the main control panel. 2) Turn the main hydraulic valve to the CLOSED position. 3) Wait for pressure gauge to read zero. 4) Complete incident report form HSE-204 within 2 hours. 5) Notify the shift supervisor before resuming.",
+  "confidence": {
+    "final_score": 59,
+    "tier": "MEDIUM",
+    "signals": {
+      "grounding_score": 0.60,
+      "generation_confidence": 0.56
+    },
+    "weights": {
+      "grounding": 0.7,
+      "generation": 0.3
+    },
+    "explanation": "MEDIUM confidence (score=59). Grounding score: 0.60 (3/5 claims supported — steps 4–5 not found in retrieved documents). Generation confidence: 0.56 (MODERATE mean token probability). Verify unsupported steps before acting.",
+    "warnings": null,
+    "degraded": false
+  },
+  "citations": [
+    {
+      "citation_id": "safety_manual_pdf__chunk_0",
+      "document": "Safety_Manual.pdf",
+      "page": 44,
+      "section": "Emergency Stop Procedures",
+      "chunk_id": "Safety_Manual.pdf__chunk_0",
+      "similarity_score": 0.91,
+      "entailment_score": 0.934,
+      "text_excerpt": "Emergency Stop (E-STOP): Press the red E-STOP button on the main control panel to cut power to all hydraulic actuators."
+    },
+    {
+      "citation_id": "safety_manual_pdf__chunk_1",
+      "document": "Safety_Manual.pdf",
+      "page": 45,
+      "section": "Hydraulic System Shutdown",
+      "chunk_id": "Safety_Manual.pdf__chunk_1",
+      "similarity_score": 0.88,
+      "entailment_score": 0.871,
+      "text_excerpt": "Hydraulic shutdown: After E-STOP, turn the main hydraulic valve (V-01) to CLOSED and verify system pressure gauge reads zero."
+    },
+    {
+      "citation_id": "safety_manual_pdf__chunk_2",
+      "document": "Safety_Manual.pdf",
+      "page": 45,
+      "section": "Access Panel Safety",
+      "chunk_id": "Safety_Manual.pdf__chunk_2",
+      "similarity_score": 0.83,
+      "entailment_score": 0.756,
+      "text_excerpt": "Before opening the hydraulic press access panel, confirm zero system pressure using PG-01."
+    },
+    {
+      "citation_id": "safety_manual_pdf__chunk_3",
+      "document": "Safety_Manual.pdf",
+      "page": 52,
+      "section": "Section 12: General Safety Procedures",
+      "chunk_id": "Safety_Manual.pdf__chunk_3",
+      "similarity_score": 0.61,
+      "entailment_score": 0.210,
+      "text_excerpt": "General Safety Procedures Section 12: All personnel must wear appropriate PPE when working near hydraulic systems."
+    }
+  ],
+  "metadata": {
+    "model": "mistral-small-24b",
+    "nli_model": "cross-encoder/nli-deberta-v3-small",
+    "timestamp": "2026-03-19T15:00:31Z",
+    "processing_time_ms": 4390,
+    "retrieved_chunks": 5,
+    "schema_version": "1.0.0"
+  },
+  "status": "success"
+}

@@ -1,0 +1,532 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "api_schema_version": "1.0.0",
+    "confidence_model_version": "confidence_model.md v1.1",
+    "description": "Integration test cases for the GroundCheck confidence engine. Inputs (answer, chunks, logprobs) feed confidence_engine.score(); expected blocks match the GroundCheckResponse schema v1.0.0.",
+    "normalization_formula": "gen_conf_norm = clip((raw_mean_prob - 0.3) / 0.6, 0.0, 1.0)",
+    "fusion_formula": "final_score = round(100 * (0.7 * grounding_norm + 0.3 * gen_conf_norm))",
+    "tier_thresholds": {"HIGH": ">=70", "MEDIUM": ">=40", "LOW": "<40"},
+    "schema_field_mapping": {
+      "confidence.final_score": "ConfidenceResult.score",
+      "confidence.signals.grounding_score": "signals['grounding_score']",
+      "confidence.signals.generation_confidence": "signals['gen_confidence_normalized']",
+      "confidence.degraded": "ConfidenceResult.degraded",
+      "confidence.warnings": "ConfidenceResult.warning wrapped in array, or null"
+    }
+  },
+
+  "test_cases": [
+
+    {
+      "id": "TC-001",
+      "name": "HIGH tier — direct knowledge base match",
+      "category": "standard",
+      "description": "Query is directly covered in the engineering knowledge base. All claims map to retrieved chunks. Model generates answer with high token confidence.",
+      "input": {
+        "query": "What is the maximum torque specification for M10 bolts in structural applications?",
+        "answer": "The maximum torque specification for M10 class 8.8 bolts in structural applications is 45 N·m. This value applies to dry-thread conditions. For lubricated threads, apply a torque reduction factor of 0.75.",
+        "chunks": [
+          "Table 4: Fastener Specifications (class 8.8) — M10 bolt maximum torque: 45 N·m (dry). For lubricated thread conditions apply torque reduction factor K=0.75.",
+          "Structural bolt installations must reference the current revision of the Fastener Specifications document.",
+          "Class 8.8 bolts: M8=23 N·m, M10=45 N·m, M12=78 N·m.",
+          "Thread lubrication: adjust torque values from Table 4 using the K-factor from Section 6.2.",
+          "All field installation torque values must be verified against Fastener_Specifications.pdf prior to use."
+        ],
+        "logprobs": [
+          -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15,
+          -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15,
+          -0.45, -0.45, -0.45, -0.45
+        ],
+        "_logprob_math": "mean_prob=(16*exp(-0.15)+4*exp(-0.45))/20≈0.816; gen_conf_norm=(0.816-0.3)/0.6=0.860"
+      },
+      "expected": {
+        "status": "success",
+        "confidence": {
+          "final_score": 88,
+          "tier": "HIGH",
+          "signals": {
+            "grounding_score_approx": 0.89,
+            "generation_confidence_approx": 0.860
+          },
+          "weights": {"grounding": 0.7, "generation": 0.3},
+          "degraded": false,
+          "warnings": null
+        }
+      },
+      "assertions": [
+        "result['status'] == 'success'",
+        "result['confidence']['tier'] == 'HIGH'",
+        "result['confidence']['final_score'] == 88",
+        "result['confidence']['degraded'] == False",
+        "result['confidence']['warnings'] is None",
+        "result['confidence']['signals']['grounding_score'] is not None",
+        "result['confidence']['signals']['generation_confidence'] is not None",
+        "result['confidence']['weights']['grounding'] == 0.7",
+        "result['confidence']['weights']['generation'] == 0.3"
+      ]
+    },
+
+    {
+      "id": "TC-002",
+      "name": "MEDIUM tier — partial knowledge base coverage",
+      "category": "standard",
+      "description": "Query partially covered in KB. 3 of 5 procedure steps found in documents; 2 steps (incident form, supervisor notification) are from model training knowledge. Moderate generation confidence.",
+      "input": {
+        "query": "What is the emergency shutdown procedure for the hydraulic press?",
+        "answer": "Emergency shutdown: 1) Press the red E-STOP button on the main control panel. 2) Turn the main hydraulic valve to the CLOSED position. 3) Wait for pressure gauge to read zero. 4) Complete incident report form HSE-204 within 2 hours. 5) Notify the shift supervisor before resuming.",
+        "chunks": [
+          "Emergency Stop (E-STOP): Press the red E-STOP button on the main control panel to cut power to all hydraulic actuators.",
+          "Hydraulic shutdown: After E-STOP, turn the main hydraulic valve (V-01) to CLOSED and verify system pressure gauge reads zero.",
+          "Before opening the hydraulic press access panel, confirm zero system pressure using PG-01.",
+          "General Safety Procedures Section 12: All personnel must wear appropriate PPE when working near hydraulic systems.",
+          "Equipment Maintenance Log: Hydraulic press (HP-3) last serviced 2026-01-15."
+        ],
+        "logprobs": [
+          -0.25, -0.25, -0.25, -0.25, -0.25, -0.25, -0.25, -0.25, -0.25, -0.25,
+          -0.70, -0.70, -0.70, -0.70, -0.70, -0.70, -0.70, -0.70, -0.70, -0.70
+        ],
+        "_logprob_math": "mean_prob=(10*exp(-0.25)+10*exp(-0.70))/20≈0.638; gen_conf_norm=(0.638-0.3)/0.6=0.563"
+      },
+      "expected": {
+        "status": "success",
+        "confidence": {
+          "final_score": 59,
+          "tier": "MEDIUM",
+          "signals": {
+            "grounding_score_approx": 0.60,
+            "generation_confidence_approx": 0.563
+          },
+          "weights": {"grounding": 0.7, "generation": 0.3},
+          "degraded": false,
+          "warnings": null
+        }
+      },
+      "assertions": [
+        "result['status'] == 'success'",
+        "result['confidence']['tier'] == 'MEDIUM'",
+        "result['confidence']['final_score'] == 59",
+        "40 <= result['confidence']['final_score'] < 70",
+        "result['confidence']['degraded'] == False",
+        "result['confidence']['warnings'] is None"
+      ]
+    },
+
+    {
+      "id": "TC-003",
+      "name": "LOW tier — query outside knowledge base",
+      "category": "standard",
+      "description": "HR policy query against an engineering knowledge base. All retrieved chunks are engineering documents. Model generates answer from training data. grounding_score=0. gen_confidence is moderate (model confidently recalls FLSA).",
+      "input": {
+        "query": "What are the overtime approval requirements for exempt employees?",
+        "answer": "Exempt employees are not entitled to overtime pay under the FLSA. Supervisors may approve additional compensation via Form HR-441 for hours exceeding 50 per week. Requests must be submitted within 14 days and approved by a director or above.",
+        "chunks": [
+          "Systems Engineering Process: requirements analysis, functional decomposition, design synthesis, verification planning.",
+          "Structural load analysis must account for static, dynamic, and thermal load cases.",
+          "The preliminary design review (PDR) establishes the allocated baseline for system architecture.",
+          "Configuration management: all changes to baseline documents must use the Engineering Change Proposal (ECP) system.",
+          "QA inspection requirements for safety-critical components are defined in QA-PROC-001."
+        ],
+        "logprobs": [
+          -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30,
+          -0.36, -0.36, -0.36, -0.36, -0.36, -0.36, -0.36, -0.36, -0.36, -0.36
+        ],
+        "_logprob_math": "mean_prob=(10*exp(-0.30)+10*exp(-0.36))/20≈0.719; gen_conf_norm=(0.719-0.3)/0.6=0.699"
+      },
+      "expected": {
+        "status": "success",
+        "confidence": {
+          "final_score": 21,
+          "tier": "LOW",
+          "signals": {
+            "grounding_score": 0.00,
+            "generation_confidence_approx": 0.699
+          },
+          "weights": {"grounding": 0.7, "generation": 0.3},
+          "degraded": false,
+          "warnings": null
+        }
+      },
+      "assertions": [
+        "result['status'] == 'success'",
+        "result['confidence']['tier'] == 'LOW'",
+        "result['confidence']['final_score'] == 21",
+        "result['confidence']['final_score'] < 40",
+        "result['confidence']['degraded'] == False",
+        "result['confidence']['signals']['grounding_score'] == 0.0"
+      ]
+    },
+
+    {
+      "id": "TC-004",
+      "name": "HIGH tier — boundary case (final_score = 70)",
+      "category": "boundary",
+      "description": "Score lands exactly at the HIGH threshold (70). Tests that tier assignment is inclusive: score >= 70 → HIGH.",
+      "input": {
+        "query": "What is the inspection frequency for hydraulic seals?",
+        "answer": "Hydraulic seals on press equipment must be inspected every 500 operating hours or quarterly, whichever occurs first. Inspection includes visual check for wear, cracking, and deformation.",
+        "chunks": [
+          "Preventive Maintenance Schedule (PM-04): Hydraulic seal inspection required every 500 operating hours or quarterly, whichever is first.",
+          "Seal inspection procedure: visually inspect for wear patterns, surface cracking, and deformation. Replace if any defect is found.",
+          "Hydraulic system reliability: seal integrity is critical to maintaining system pressure.",
+          "Maintenance records must be updated in the CMMS system within 24 hours of completing any scheduled inspection.",
+          "Spare parts list for HP-3: hydraulic seal kits (part no. SK-4421) stocked in warehouse B, shelf 12."
+        ],
+        "logprobs": [
+          -0.4308, -0.4308, -0.4308, -0.4308, -0.4308,
+          -0.4308, -0.4308, -0.4308, -0.4308, -0.4308,
+          -0.4308, -0.4308, -0.4308, -0.4308, -0.4308,
+          -0.4308, -0.4308, -0.4308, -0.4308, -0.4308
+        ],
+        "_logprob_math": "all 20 tokens at ln(0.650)≈-0.4308; mean_prob=0.650; gen_conf_norm=(0.650-0.3)/0.6=0.583. With grounding≈0.75: round((52.5+17.5))=70"
+      },
+      "expected": {
+        "status": "success",
+        "confidence": {
+          "final_score": 70,
+          "tier": "HIGH",
+          "signals": {
+            "grounding_score_approx": 0.75,
+            "generation_confidence_approx": 0.583
+          },
+          "weights": {"grounding": 0.7, "generation": 0.3},
+          "degraded": false,
+          "warnings": null
+        }
+      },
+      "assertions": [
+        "result['confidence']['tier'] == 'HIGH'",
+        "result['confidence']['final_score'] == 70",
+        "result['confidence']['final_score'] >= 70"
+      ],
+      "_boundary_note": "score=70 is the minimum HIGH score. Inclusive threshold: >= 70 → HIGH."
+    },
+
+    {
+      "id": "TC-005",
+      "name": "MEDIUM tier — boundary case (final_score = 40)",
+      "category": "boundary",
+      "description": "Score lands exactly at the MEDIUM threshold (40). Tests that score=40 is MEDIUM, not LOW.",
+      "input": {
+        "query": "What is the tensile strength of Grade 2 titanium?",
+        "answer": "Grade 2 titanium has a minimum ultimate tensile strength of 345 MPa and a yield strength of 275 MPa. It is used in corrosion-resistant structural applications.",
+        "chunks": [
+          "Titanium alloys overview: Ti-6Al-4V (Grade 5) is the most commonly used aerospace titanium with UTS of 950 MPa.",
+          "Material selection criteria: choose materials based on strength-to-weight ratio, corrosion resistance, and temperature range.",
+          "Structural materials database: see Appendix C for complete material property tables.",
+          "Corrosion-resistant materials: Grade 2 titanium offers excellent corrosion resistance in marine environments.",
+          "Manufacturing process guidelines for titanium components require specialized tooling and cutting fluid."
+        ],
+        "logprobs": [
+          -0.6162, -0.6162, -0.6162, -0.6162, -0.6162,
+          -0.6162, -0.6162, -0.6162, -0.6162, -0.6162,
+          -0.6162, -0.6162, -0.6162, -0.6162, -0.6162,
+          -0.6162, -0.6162, -0.6162, -0.6162, -0.6162
+        ],
+        "_logprob_math": "all 20 tokens at ln(0.540)≈-0.6162; mean_prob=0.540; gen_conf_norm=(0.540-0.3)/0.6=0.400. With grounding=0.40: round((28.0+12.0))=40"
+      },
+      "expected": {
+        "status": "success",
+        "confidence": {
+          "final_score": 40,
+          "tier": "MEDIUM",
+          "signals": {
+            "grounding_score_approx": 0.40,
+            "generation_confidence_approx": 0.400
+          },
+          "weights": {"grounding": 0.7, "generation": 0.3},
+          "degraded": false,
+          "warnings": null
+        }
+      },
+      "assertions": [
+        "result['confidence']['tier'] == 'MEDIUM'",
+        "result['confidence']['final_score'] == 40",
+        "result['confidence']['final_score'] >= 40"
+      ],
+      "_boundary_note": "score=40 is the minimum MEDIUM score. Inclusive threshold: >= 40 → MEDIUM, not LOW."
+    },
+
+    {
+      "id": "TC-006",
+      "name": "LOW tier — empty chunks (no retrieval)",
+      "category": "edge_case",
+      "description": "Retriever returned no chunks. grounding_score=0.0 for all claims. Score driven by gen_confidence at 30% weight only. Max possible score is 30.",
+      "input": {
+        "query": "What is the maximum torque for M10 bolts?",
+        "answer": "The maximum torque for M10 class 8.8 bolts is 45 N·m in dry conditions.",
+        "chunks": [],
+        "logprobs": [
+          -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15,
+          -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15,
+          -0.45, -0.45, -0.45, -0.45
+        ],
+        "_logprob_math": "Same logprobs as TC-001; gen_conf_norm≈0.860. With grounding=0: round(0+0.860*30)=round(25.8)=26"
+      },
+      "expected": {
+        "status": "success",
+        "confidence": {
+          "final_score": 26,
+          "tier": "LOW",
+          "signals": {
+            "grounding_score": 0.0,
+            "generation_confidence_approx": 0.860
+          },
+          "weights": {"grounding": 0.7, "generation": 0.3},
+          "degraded": false,
+          "warnings": null
+        }
+      },
+      "assertions": [
+        "result['status'] == 'success'",
+        "result['confidence']['tier'] == 'LOW'",
+        "result['confidence']['final_score'] < 40",
+        "result['confidence']['signals']['grounding_score'] == 0.0",
+        "result['confidence']['degraded'] == False",
+        "result['citations'] == []"
+      ],
+      "_behavior": "Empty chunks → grounding=0.0 for all claims. Even a correct answer is LOW with no retrieved context — by design."
+    },
+
+    {
+      "id": "TC-007",
+      "name": "LOW tier — refusal answer ('I don't know')",
+      "category": "edge_case",
+      "description": "Short refusal. NLTK extracts 0 claims (< MIN_CLAIM_WORDS=5 words). grounding_score=0.0. Score is gen_confidence × 30% only.",
+      "input": {
+        "query": "What is the derating factor for Class H insulation at 180°C?",
+        "answer": "I don't know.",
+        "chunks": [
+          "Motor insulation classes: Class A (105°C), Class B (130°C), Class F (155°C), Class H (180°C).",
+          "Thermal aging factors for motor windings are specified in IEEE Std 117.",
+          "Derating guidelines for high-temperature environments are in Appendix D of the Motor Selection Guide.",
+          "Insulation resistance testing procedures per IEEE Std 43.",
+          "Motor nameplate data must include insulation class, service factor, and ambient temperature rating."
+        ],
+        "logprobs": [-0.1625, -0.1625, -0.1625, -0.1625],
+        "_logprob_math": "4 tokens at ln(0.850)≈-0.1625; mean_prob=0.850; gen_conf_norm=(0.850-0.3)/0.6=0.917. Score=round(0+0.917*30)=28"
+      },
+      "expected": {
+        "status": "success",
+        "confidence": {
+          "final_score": 28,
+          "tier": "LOW",
+          "signals": {
+            "grounding_score": 0.0,
+            "generation_confidence_approx": 0.917
+          },
+          "weights": {"grounding": 0.7, "generation": 0.3},
+          "degraded": false,
+          "warnings": null
+        }
+      },
+      "assertions": [
+        "result['status'] == 'success'",
+        "result['confidence']['tier'] == 'LOW'",
+        "result['confidence']['signals']['grounding_score'] == 0.0",
+        "result['confidence']['degraded'] == False"
+      ],
+      "_behavior": "N=0 claims path in grounding_scorer → grounding_score=0.0 with logged warning (not surfaced as API warning). System correctly scores LOW."
+    },
+
+    {
+      "id": "TC-008",
+      "name": "HIGH tier — degraded mode, grounding signal unavailable",
+      "category": "degraded",
+      "description": "Grounding scorer raises an exception. Engine sets grounding_score=None. fuse() enters degraded mode: final_score = round(gen_confidence * 100). Status becomes partial_success.",
+      "input": {
+        "_note": "Requires mocking grounding_scorer.compute() to raise an exception, or patching engine to inject None.",
+        "query": "Any query",
+        "answer": "Any answer",
+        "chunks": ["Any chunk"],
+        "logprobs": [
+          -0.30, -0.30, -0.30, -0.30, -0.30,
+          -0.36, -0.36, -0.36, -0.36, -0.36,
+          -0.30, -0.30, -0.30, -0.30, -0.30,
+          -0.36, -0.36, -0.36, -0.36, -0.36
+        ],
+        "_logprob_math": "mean_prob≈0.719; gen_conf_norm=0.699. Degraded score=round(0.699*100)=70",
+        "inject_signal_values": {
+          "grounding_score": null,
+          "gen_confidence": 0.699
+        }
+      },
+      "expected": {
+        "status": "partial_success",
+        "confidence": {
+          "final_score": 70,
+          "tier": "HIGH",
+          "signals": {
+            "grounding_score": null,
+            "generation_confidence_approx": 0.699
+          },
+          "weights": {"grounding": 0.0, "generation": 1.0},
+          "degraded": true,
+          "warnings": ["Grounding score unavailable. Using Generation Confidence only."]
+        },
+        "error": {
+          "code": "NLI_FAILURE",
+          "message": "Grounding score unavailable. Using Generation Confidence only.",
+          "severity": "warning"
+        }
+      },
+      "assertions": [
+        "result['status'] == 'partial_success'",
+        "result['confidence']['degraded'] == True",
+        "result['confidence']['warnings'] is not None",
+        "len(result['confidence']['warnings']) > 0",
+        "result['confidence']['final_score'] == 70",
+        "result['confidence']['tier'] == 'HIGH'",
+        "result['confidence']['signals']['grounding_score'] is None",
+        "result['confidence']['weights']['grounding'] == 0.0",
+        "result['confidence']['weights']['generation'] == 1.0",
+        "result['error']['code'] == 'NLI_FAILURE'",
+        "result['error']['severity'] == 'warning'"
+      ],
+      "_behavior": "fuse(None, 0.699) → degraded: score=round(0.699*100)=70. Gen confidence gets full weight. Note: degraded HIGH is less reliable than normal HIGH."
+    },
+
+    {
+      "id": "TC-009",
+      "name": "HIGH tier — degraded mode, gen confidence signal unavailable",
+      "category": "degraded",
+      "description": "Generation confidence scorer raises an exception (logprobs=None or malformed). Engine sets gen_confidence=None. fuse() enters degraded mode: final_score = round(grounding_score * 100). Status becomes partial_success.",
+      "input": {
+        "_note": "Pass logprobs=None (triggers TypeError in gen scorer) or mock scorer to raise.",
+        "query": "What are the torque specs for M12 bolts?",
+        "answer": "M12 class 8.8 bolts have a maximum torque of 78 N·m in dry conditions.",
+        "chunks": [
+          "Table 4: Fastener Specifications (class 8.8) — M12 bolt maximum torque: 78 N·m (dry).",
+          "Structural bolt torque values: M8=23 N·m, M10=45 N·m, M12=78 N·m.",
+          "All torque specs apply to dry-thread conditions unless otherwise specified.",
+          "For lubricated thread conditions apply K-factor from Section 6.2.",
+          "Torque wrench calibration must be verified before applying any fastener torque spec."
+        ],
+        "logprobs": null,
+        "inject_signal_values": {
+          "grounding_score": 0.75,
+          "gen_confidence": null
+        }
+      },
+      "expected": {
+        "status": "partial_success",
+        "confidence": {
+          "final_score": 75,
+          "tier": "HIGH",
+          "signals": {
+            "grounding_score_approx": 0.75,
+            "generation_confidence": null
+          },
+          "weights": {"grounding": 1.0, "generation": 0.0},
+          "degraded": true,
+          "warnings": ["Generation confidence unavailable. Using Grounding Score only."]
+        },
+        "error": {
+          "code": "GENERATION_CONFIDENCE_UNAVAILABLE",
+          "message": "Generation confidence unavailable. Using Grounding Score only.",
+          "severity": "warning"
+        }
+      },
+      "assertions": [
+        "result['status'] == 'partial_success'",
+        "result['confidence']['degraded'] == True",
+        "result['confidence']['warnings'] is not None",
+        "result['confidence']['final_score'] == 75",
+        "result['confidence']['tier'] == 'HIGH'",
+        "result['confidence']['signals']['generation_confidence'] is None",
+        "result['confidence']['weights']['grounding'] == 1.0",
+        "result['confidence']['weights']['generation'] == 0.0",
+        "result['error']['code'] == 'GENERATION_CONFIDENCE_UNAVAILABLE'",
+        "result['error']['severity'] == 'warning'"
+      ],
+      "_behavior": "fuse(0.75, None) → degraded: score=round(0.75*100)=75. Grounding gets full weight. Still meaningful since grounding is the primary signal."
+    },
+
+    {
+      "id": "TC-010",
+      "name": "MEDIUM tier — conflicting information across retrieved chunks",
+      "category": "edge_case",
+      "description": "Two retrieved chunks contain contradictory information (HP-3 max temp: Rev A says 65°C, Rev B says 55°C). DeBERTa assigns moderate entailment. NLI max() picks the best-matching chunk but conflict is unresolved. MEDIUM score.",
+      "input": {
+        "query": "What is the maximum operating temperature for the HP-3 hydraulic press?",
+        "answer": "The HP-3 hydraulic press has a maximum operating temperature of 65°C for continuous operation.",
+        "chunks": [
+          "HP-3 Hydraulic Press Specifications (Rev A, 2024): Maximum continuous operating temperature: 65°C. Use ISO VG 46 fluid.",
+          "HP-3 Hydraulic Press Specifications (Rev B, 2025): Maximum continuous operating temperature updated to 55°C following seal material change. Use ISO VG 32 fluid.",
+          "Seal degradation accelerates exponentially above the rated operating temperature.",
+          "Hydraulic fluid viscosity requirements: consult the equipment OEM manual for the approved fluid specification.",
+          "Preventive maintenance: hydraulic fluid temperature monitoring required during all HP-3 operating cycles."
+        ],
+        "logprobs": [
+          -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30,
+          -0.46, -0.46, -0.46, -0.46, -0.46, -0.46, -0.46, -0.46, -0.46, -0.46
+        ],
+        "_logprob_math": "mean_prob≈0.686; gen_conf_norm=(0.686-0.3)/0.6=0.643",
+        "_conflict_note": "Chunk 0 (Rev A) supports 65°C. Chunk 1 (Rev B) contradicts it with 55°C. NLI max() picks the supporting chunk but cannot resolve the conflict."
+      },
+      "expected": {
+        "status": "success",
+        "confidence": {
+          "final_score": 59,
+          "tier": "MEDIUM",
+          "signals": {
+            "grounding_score_approx": 0.55,
+            "generation_confidence_approx": 0.643
+          },
+          "weights": {"grounding": 0.7, "generation": 0.3},
+          "degraded": false,
+          "warnings": null
+        }
+      },
+      "assertions": [
+        "result['status'] == 'success'",
+        "result['confidence']['tier'] == 'MEDIUM'",
+        "40 <= result['confidence']['final_score'] < 70",
+        "result['confidence']['degraded'] == False"
+      ],
+      "_behavior": "Conflicting document revisions produce moderate grounding. UI should surface both chunks. User must verify against most recent document revision."
+    },
+
+    {
+      "id": "TC-011",
+      "name": "LOW tier — very short answer (known limitation)",
+      "category": "edge_case",
+      "description": "One-word answer 'Yes.' has < MIN_CLAIM_WORDS=5 words → num_claims=0 → grounding_score=0.0. Single high-probability token inflates generation_confidence to 1.0. Documented limitation: short answers produce artificially elevated gen_confidence.",
+      "input": {
+        "query": "Is Grade 2 titanium approved for this structural application?",
+        "answer": "Yes.",
+        "chunks": [
+          "Approved materials list (AML-2024): Grade 2 titanium (UNS R50400) is approved for use in structural brackets and fittings where corrosion resistance is required.",
+          "Material substitution requires written engineering approval before any change to the AML.",
+          "Grade 2 titanium meets the requirements of ASTM B265 Grade 2.",
+          "Structural applications must use materials listed in the current AML revision.",
+          "Non-standard material usage requires a Material Review Board (MRB) disposition."
+        ],
+        "logprobs": [-0.0305],
+        "_logprob_math": "1 token at ln(0.970)≈-0.0305; mean_prob=0.970; gen_conf_norm=clip((0.970-0.3)/0.6)=clip(1.117)=1.0. Score=round(0+1.0*30)=30"
+      },
+      "expected": {
+        "status": "success",
+        "confidence": {
+          "final_score": 30,
+          "tier": "LOW",
+          "signals": {
+            "grounding_score": 0.0,
+            "generation_confidence": 1.0
+          },
+          "weights": {"grounding": 0.7, "generation": 0.3},
+          "degraded": false,
+          "warnings": null
+        }
+      },
+      "assertions": [
+        "result['status'] == 'success'",
+        "result['confidence']['tier'] == 'LOW'",
+        "result['confidence']['final_score'] == 30",
+        "result['confidence']['signals']['grounding_score'] == 0.0",
+        "result['confidence']['signals']['generation_confidence'] == 1.0"
+      ],
+      "_limitation": "generation_confidence=1.0 is artificially high due to short common-word token. The 70% grounding weight prevents this from inflating the final_score above LOW. Documented in confidence_model.md §9.2 L2."
+    }
+  ]
+}

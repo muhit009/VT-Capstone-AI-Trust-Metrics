@@ -1,0 +1,84 @@
+{
+  "_meta": {
+    "description": "Sample LOW confidence response — HR overtime policy query not in knowledge base",
+    "tier": "LOW",
+    "score_range": "0–39",
+    "confidence_model_version": "confidence_model.md v1.1",
+    "api_schema_version": "1.0.0",
+    "source": "Derived from confidence_model.md Worked Example 3",
+    "key_insight": "generation_confidence=0.70 (model was fairly certain), yet final_score=21 (LOW). Grounding dominates at 70% weight. A confidently wrong model is more dangerous than a visibly uncertain one."
+  },
+
+  "_test_input": {
+    "chunks": [
+      "Systems Engineering Process: requirements analysis, functional decomposition, design synthesis, verification planning.",
+      "Structural load analysis must account for static, dynamic, and thermal load cases.",
+      "The preliminary design review (PDR) establishes the allocated baseline for system architecture.",
+      "Configuration management: all changes to baseline documents must use the Engineering Change Proposal (ECP) system.",
+      "QA inspection requirements for safety-critical components are defined in QA-PROC-001."
+    ],
+    "logprobs": [
+      -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30, -0.30,
+      -0.36, -0.36, -0.36, -0.36, -0.36, -0.36, -0.36, -0.36, -0.36, -0.36
+    ],
+    "_logprob_note": "20 tokens: 10 at ln(0.741)≈-0.30, 10 at ln(0.698)≈-0.36. Mean token prob ≈ 0.719. Model was moderately confident drawing on FLSA training knowledge — not the retrieved engineering documents."
+  },
+
+  "_score_derivation": {
+    "grounding_norm": "0.00 (0/4 claims matched — HR policy not in engineering KB)",
+    "gen_conf_raw": 0.719,
+    "gen_conf_norm": "(0.719 - 0.3) / 0.6 = 0.699",
+    "fusion": "round((0.7 × 0.00 + 0.3 × 0.699) × 100) = round(20.97) = 21",
+    "tier_check": "21 < 40 → LOW"
+  },
+
+  "query_id": "q_20260319_151522_cde345",
+  "query": "What are the overtime approval requirements for exempt employees?",
+  "answer": "Exempt employees are not entitled to overtime pay under the Fair Labor Standards Act. However, supervisors may approve additional compensation through the Flex-Time Compensation Program (Form HR-441) for work exceeding 50 hours per week. All requests must be submitted within 14 days of the pay period and approved by a department director or above.",
+  "confidence": {
+    "final_score": 21,
+    "tier": "LOW",
+    "signals": {
+      "grounding_score": 0.00,
+      "generation_confidence": 0.70
+    },
+    "weights": {
+      "grounding": 0.7,
+      "generation": 0.3
+    },
+    "explanation": "LOW confidence (score=21). Grounding score: 0.00 (0/4 claims supported — HR policy is not present in the engineering knowledge base). Generation confidence: 0.70 (MODERATE). Model generated this answer from training knowledge, not retrieved documents. Do not use for policy decisions.",
+    "warnings": null,
+    "degraded": false
+  },
+  "citations": [
+    {
+      "citation_id": "se_handbook_pdf__chunk_0",
+      "document": "Systems_Engineering_Handbook.pdf",
+      "page": 4,
+      "section": "Chapter 1: Overview",
+      "chunk_id": "Systems_Engineering_Handbook.pdf__chunk_0",
+      "similarity_score": 0.31,
+      "entailment_score": 0.021,
+      "text_excerpt": "Systems Engineering Process: requirements analysis, functional decomposition, design synthesis, verification planning."
+    },
+    {
+      "citation_id": "se_handbook_pdf__chunk_2",
+      "document": "Systems_Engineering_Handbook.pdf",
+      "page": 17,
+      "section": "Chapter 3: Design Reviews",
+      "chunk_id": "Systems_Engineering_Handbook.pdf__chunk_2",
+      "similarity_score": 0.28,
+      "entailment_score": 0.015,
+      "text_excerpt": "The preliminary design review (PDR) establishes the allocated baseline for system architecture."
+    }
+  ],
+  "metadata": {
+    "model": "mistral-small-24b",
+    "nli_model": "cross-encoder/nli-deberta-v3-small",
+    "timestamp": "2026-03-19T15:15:22Z",
+    "processing_time_ms": 4105,
+    "retrieved_chunks": 5,
+    "schema_version": "1.0.0"
+  },
+  "status": "success"
+}
