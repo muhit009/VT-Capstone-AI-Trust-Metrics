@@ -60,6 +60,25 @@ Question: {question}
 
 Answer:"""
 
+CONFIDENCE_METRICS_PROMPT = """
+You are a precisie engineering assistant. You have received a list of values\
+that represents the confidence results of an answers\
+based on the query and answer provided towards it. Read through the scores, query, and provided answer\
+to figure out why a score was provided for each confidence score.\
+Be sure to provide your explanation in at MOST two sentences.\
+(e.g. This score was provided because it managed to answer the query without going off-topic.)
+
+"""
+
+METRICS_PROMPT_TEMPLATE = """\
+Question: {question}
+
+Answer: {answer}
+
+Confidence Scores: {confidence_scores}
+
+"""
+
 # Full prompt: system message + RAG user message
 RAG_CHAT_PROMPT = ChatPromptTemplate.from_messages([
     ("system", SYSTEM_PROMPT),
@@ -74,6 +93,12 @@ NO_CONTEXT_PROMPT = ChatPromptTemplate.from_messages([
         "Inform the user that you cannot answer without source documents.\n\n"
         "Question: {question}\n\nAnswer:"
     )),
+])
+
+# Prompt for explanation of confidence scores
+FULL_METRIC_EXPLANATION_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", CONFIDENCE_METRICS_PROMPT),
+    ("human", METRICS_PROMPT_TEMPLATE)
 ])
 
 
@@ -100,6 +125,7 @@ class RAGResponse:
     retrieved_chunks: int
     processing_time_ms: int
     prompt_used: str = field(repr=False)  # full rendered prompt, useful for debugging
+    explanation: str
 
     def citations_as_dicts(self) -> List[dict]:
         """Serialize citations to GroundCheck JSON schema shape."""
@@ -245,6 +271,26 @@ class RAGOrchestrator:
             db_session,
         )
 
+        # Step 4 - Explanation
+        explanation = ""
+        if inference_response.confidence:
+            explanation_messages = FULL_METRIC_EXPLANATION_PROMPT.format_messages(
+                question=query,
+                answer=inference_response.generated_text,
+                confidence_scores=str(inference_response.confidence.score)
+            )
+            explanation_prompt_str = "\n".join(
+            f"{m.type.upper()}: {m.content}" for m in explanation_messages
+            )   
+            explanation_response = self._model_svc.generate(
+                InferenceRequest(prompt=explanation_prompt_str),
+                db_session,
+            )
+            explanation = explanation_response.generated_text
+        else:
+            explanation = "No score was provided for explanation."
+
+
         processing_time_ms = int((time.monotonic() - t_start) * 1000)
 
         return RAGResponse(
@@ -256,6 +302,7 @@ class RAGOrchestrator:
             retrieved_chunks=len(citations),
             processing_time_ms=processing_time_ms,
             prompt_used=prompt_str,
+            explanation=explanation
         )
 
     # ------------------------------------------------------------------
