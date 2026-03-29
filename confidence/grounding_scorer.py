@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
+from typing import Optional
 
 import nltk
 from transformers import pipeline
@@ -37,7 +38,7 @@ ENTAILMENT_LABEL    = "ENTAILMENT"   # expected label from DeBERTa NLI output
 class ClaimDetail:
     claim:                     str
     max_entailment:            float
-    best_supporting_chunk_idx: int
+    best_supporting_chunk_idx: Optional[int]
     supported:                 bool   # max_entailment > SUPPORTED_THRESHOLD
 
 
@@ -101,6 +102,25 @@ class GroundingScorer:
                 grounding_score=0.0,
                 num_claims=0,
                 supported_claims=0,
+            )
+
+        if not chunks:
+            # Preserve claim-level audit output even when retrieval returns no evidence.
+            logger.warning("No chunks provided — grounding score = 0.0 for all claims")
+            claim_details = [
+                ClaimDetail(
+                    claim=claim,
+                    max_entailment=0.0,
+                    best_supporting_chunk_idx=None,
+                    supported=False,
+                )
+                for claim in claims
+            ]
+            return GroundingResult(
+                grounding_score=0.0,
+                num_claims=len(claim_details),
+                supported_claims=0,
+                claim_details=claim_details,
             )
 
         # Build all (claim, chunk) pairs for batch inference
