@@ -68,3 +68,4 @@ class Decision(Base, TimestampMixin):
     rationale = Column(Text)
     
     answer = relationship("Answer", back_populates="decisions")
+    
