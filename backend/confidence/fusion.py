@@ -7,7 +7,7 @@ into a single 0–100 confidence score with a tier label.
 Formula (from fusion_algorithm.md):
     Final_Score = round( 100 * (0.7 * S_grounding + 0.3 * S_gen) )
 
-Tier mapping:
+Tier mapping (thresholds in confidence/config.py, logic in tier_categorizer.py):
     HIGH   >= 70
     MEDIUM >= 40
     LOW     < 40
@@ -26,9 +26,8 @@ from typing import Optional
 from .config import (
     WEIGHT_GROUNDING,
     WEIGHT_GEN_CONF,
-    TIER_HIGH_THRESHOLD,
-    TIER_MEDIUM_THRESHOLD,
 )
+from .tier_categorizer import tier_label   # single source of truth for tier logic
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +54,6 @@ class FusionResult:
                 "warning": self.warning,
             }
         }
-
-
-def _tier(score: int) -> str:
-    if score >= TIER_HIGH_THRESHOLD:
-        return "HIGH"
-    if score >= TIER_MEDIUM_THRESHOLD:
-        return "MEDIUM"
-    return "LOW"
 
 
 def _sanitize(v: float | None) -> float | None:
@@ -94,14 +85,11 @@ def fuse(
     g = _sanitize(grounding_score)
     c = _sanitize(gen_confidence)
 
-    degraded = False
-    warning  = None
-
     # --- both missing -------------------------------------------------------
     if g is None and c is None:
         logger.warning("Both signals unavailable — returning score=0")
         return FusionResult(
-            score=0, tier="LOW",
+            score=0, tier=tier_label(0),
             grounding_contribution=0.0, gen_conf_contribution=0.0,
             degraded=True,
             warning="Both signals unavailable. Score set to 0.",
@@ -109,31 +97,25 @@ def fuse(
 
     # --- one signal missing (degraded mode) ---------------------------------
     if g is None:
-        degraded  = True
-        warning   = "Grounding score unavailable. Using Generation Confidence only."
+        warning = "Grounding score unavailable. Using Generation Confidence only."
         logger.warning(warning)
-        g_contrib = 0.0
-        c_contrib = round(c * 100, 4)
-        score     = round(c * 100)
+        score = round(c * 100)
         return FusionResult(
-            score=score, tier=_tier(score),
-            grounding_contribution=g_contrib,
-            gen_conf_contribution=c_contrib,
-            degraded=degraded, warning=warning,
+            score=score, tier=tier_label(score),
+            grounding_contribution=0.0,
+            gen_conf_contribution=round(c * 100, 4),
+            degraded=True, warning=warning,
         )
 
     if c is None:
-        degraded  = True
-        warning   = "Generation confidence unavailable. Using Grounding Score only."
+        warning = "Generation confidence unavailable. Using Grounding Score only."
         logger.warning(warning)
-        g_contrib = round(g * 100, 4)
-        c_contrib = 0.0
-        score     = round(g * 100)
+        score = round(g * 100)
         return FusionResult(
-            score=score, tier=_tier(score),
-            grounding_contribution=g_contrib,
-            gen_conf_contribution=c_contrib,
-            degraded=degraded, warning=warning,
+            score=score, tier=tier_label(score),
+            grounding_contribution=round(g * 100, 4),
+            gen_conf_contribution=0.0,
+            degraded=True, warning=warning,
         )
 
     # --- normal fusion ------------------------------------------------------
@@ -141,12 +123,14 @@ def fuse(
     c_contrib = c * WEIGHT_GEN_CONF  * 100
     score     = round(g_contrib + c_contrib)
 
-    logger.debug("Fusion: grounding=%.4f*70=%.2f  gen_conf=%.4f*30=%.2f  score=%d",
-                 g, g_contrib, c, c_contrib, score)
+    logger.debug(
+        "Fusion: grounding=%.4f*70=%.2f  gen_conf=%.4f*30=%.2f  score=%d",
+        g, g_contrib, c, c_contrib, score,
+    )
 
     return FusionResult(
         score=score,
-        tier=_tier(score),
+        tier=tier_label(score),
         grounding_contribution=round(g_contrib, 4),
         gen_conf_contribution=round(c_contrib, 4),
         degraded=False,

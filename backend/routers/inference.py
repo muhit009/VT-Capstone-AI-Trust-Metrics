@@ -1,7 +1,17 @@
 """
 routers/inference.py
-Inference router — includes both the original /predict endpoint
-and the new /rag/query endpoint that returns a full GroundCheckResponse.
+Legacy inference router.
+
+Endpoints
+---------
+POST /v1/predict       — Direct LLM inference (no RAG). Kept for local dev / testing.
+GET  /v1/health        — Health check.
+POST /v1/rag/query     — Full RAG pipeline. Delegates to the canonical implementation
+                         in routers/query.py (POST /api/v1/query) to avoid duplication.
+
+Note: New integrations should use POST /api/v1/query (routers/query.py) which
+includes audit logging, configurable top_k, and the full GroundCheckResponse shape.
+This router is retained for backward compatibility with existing clients.
 """
 
 import time
@@ -13,16 +23,22 @@ from models.schemas import InferenceRequest, InferenceResponse, RAGInferenceRequ
 from services.model_service import model_executor
 from rag_orchestrator import rag_orchestrator
 from response_models import GroundCheckResponse, ResponseBuilder, ErrorCode
+from confidence.engine import confidence_engine
+from confidence.grounding_scorer import grounding_scorer
 
 router = APIRouter(prefix="/v1")
 
 
 # ---------------------------------------------------------------------------
-# Existing endpoint — unchanged
+# Local dev / direct inference endpoint (no RAG)
 # ---------------------------------------------------------------------------
 
 @router.post("/predict", response_model=InferenceResponse)
 async def predict(payload: InferenceRequest, db: Session = Depends(get_db)):
+    """
+    Direct LLM inference without retrieval. Used for local dev and testing.
+    For production RAG queries use POST /api/v1/query.
+    """
     try:
         return model_executor.generate(payload, db)
     except Exception as e:
@@ -35,40 +51,27 @@ async def health_check():
 
 
 # ---------------------------------------------------------------------------
-# New RAG endpoint — returns full GroundCheckResponse
+# RAG query endpoint — backward-compatible wrapper
 # ---------------------------------------------------------------------------
 
 @router.post("/rag/query", response_model=GroundCheckResponse)
 async def rag_query(payload: RAGInferenceRequest, db: Session = Depends(get_db)):
     """
-    Full RAG pipeline endpoint.
-
-    Flow:
-      1. Retrieve top-k chunks (retrieval_pipeline inside rag_orchestrator)
-      2. Generate answer (model_service via rag_orchestrator.run())
-      3. Score confidence (confidence_engine: grounding + generation fusion)
-      4. Return GroundCheckResponse with score, tier, citations, metadata
+    Full RAG pipeline endpoint (backward-compatible).
+    Prefer POST /api/v1/query for new integrations (includes audit logging).
     """
     t_start = time.monotonic()
 
     try:
-        # --- Steps 1 & 2: Retrieve + Generate -------------------------------
         rag_response = rag_orchestrator.run(
             query=payload.query,
             db_session=db,
             top_k=payload.top_k,
         )
 
-        # --- Step 3: Score confidence ----------------------------------------
         chunk_texts = [c.text for c in rag_response.citations]
+        logprobs    = getattr(model_executor, "_last_logprobs", [])
 
-        # model_service stores last logprobs as _last_logprobs after generate()
-        logprobs = getattr(model_executor, "_last_logprobs", [])
-
-        from confidence.engine import confidence_engine
-        from confidence.grounding_scorer import grounding_scorer
-
-        # Run grounding scorer separately to get claim_details for citation enrichment
         grounding_result = None
         if chunk_texts and rag_response.answer:
             try:
@@ -79,7 +82,6 @@ async def rag_query(payload: RAGInferenceRequest, db: Session = Depends(get_db))
             except Exception:
                 grounding_result = None
 
-        # Run full confidence engine (handles fusion + degraded mode internally)
         confidence_result = confidence_engine.score(
             answer=rag_response.answer or "",
             chunks=chunk_texts,
@@ -88,7 +90,6 @@ async def rag_query(payload: RAGInferenceRequest, db: Session = Depends(get_db))
 
         processing_time_ms = int((time.monotonic() - t_start) * 1000)
 
-        # --- Step 4: Build GroundCheckResponse ------------------------------
         return ResponseBuilder.from_rag_run(
             query=payload.query,
             answer=rag_response.answer,
@@ -101,7 +102,6 @@ async def rag_query(payload: RAGInferenceRequest, db: Session = Depends(get_db))
         )
 
     except RuntimeError as e:
-        # rag_orchestrator.run() raises RuntimeError when no model is loaded
         raise HTTPException(status_code=503, detail=str(e))
 
     except Exception as e:

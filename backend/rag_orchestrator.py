@@ -1,30 +1,27 @@
 """
 rag_orchestrator.py
-LangChain-based RAG pipeline orchestration for GroundCheck (Issue #62).
+RAG pipeline orchestration — Retrieval → Prompt → LLM.
 
-Wires together the existing components:
-  - RetrievalPipeline  (retrieval.py)        — embed + search + cite
-  - ModelService       (services/model_service.py) — LLM generation + confidence
-  - Prompt templates   (defined below)       — system + RAG prompt construction
+Wires together:
+  - RetrievalPipeline  (retrieval.py)           — embed + search + cite
+  - ModelService       (services/model_service.py) — LLM generation
+  - Prompt templates   (defined below)           — system + RAG prompt construction
 
 Public API
 ----------
 rag_orchestrator.run(query, db_session, top_k) -> RAGResponse
 rag_orchestrator.run_retrieval_only(query, top_k) -> List[Citation]
+rag_orchestrator.render_prompt(query, citations) -> str   # debug / tests
 
-Design notes
-------------
-LangChain is used for:
-  1. Prompt template management (ChatPromptTemplate)
-  2. Output parsing (StrOutputParser)
-  3. LCEL chain composition (retriever | prompt | llm | parser)
-
-We do NOT use LangChain's built-in retrievers or LLM wrappers because
-the project already has well-tested implementations in retrieval.py and
-model_service.py. Instead we wrap them as thin LangChain-compatible
-callables so the chain can be composed with the | operator.
+Design note
+-----------
+LangChain is used only for ChatPromptTemplate and StrOutputParser.
+We do not use LangChain's built-in retrievers or LLM wrappers — the project
+has well-tested implementations in retrieval.py and model_service.py.
+Confidence scoring is handled separately by confidence/engine.py and called
+in routers/query.py after run() returns, keeping the orchestrator focused
+on Retrieval + Generation only.
 """
-
 from __future__ import annotations
 
 import time
@@ -33,7 +30,6 @@ from typing import List, Optional
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 
 from retrieval import RetrievalPipeline, Citation, retrieval_pipeline
 from models.schemas import InferenceRequest, ConfidenceMetrics
@@ -60,25 +56,6 @@ Question: {question}
 
 Answer:"""
 
-CONFIDENCE_METRICS_PROMPT = """
-You are a precisie engineering assistant. You have received a list of values\
-that represents the confidence results of an answers\
-based on the query and answer provided towards it. Read through the scores, query, and provided answer\
-to figure out why a score was provided for each confidence score.\
-Be sure to provide your explanation in at MOST two sentences.\
-(e.g. This score was provided because it managed to answer the query without going off-topic.)
-
-"""
-
-METRICS_PROMPT_TEMPLATE = """\
-Question: {question}
-
-Answer: {answer}
-
-Confidence Scores: {confidence_scores}
-
-"""
-
 # Full prompt: system message + RAG user message
 RAG_CHAT_PROMPT = ChatPromptTemplate.from_messages([
     ("system", SYSTEM_PROMPT),
@@ -95,12 +72,6 @@ NO_CONTEXT_PROMPT = ChatPromptTemplate.from_messages([
     )),
 ])
 
-# Prompt for explanation of confidence scores
-FULL_METRIC_EXPLANATION_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", CONFIDENCE_METRICS_PROMPT),
-    ("human", METRICS_PROMPT_TEMPLATE)
-])
-
 
 # ---------------------------------------------------------------------------
 # RAGResponse — typed return value
@@ -111,21 +82,19 @@ class RAGResponse:
     """
     Full output of a RAG pipeline run.
 
-    Matches the shape expected by GroundCheckResponse (Issue #86):
-      - answer         → GroundCheckResponse.answer
-      - citations      → GroundCheckResponse.citations  (via Citation.to_dict())
-      - confidence     → GroundCheckResponse.confidence.signals.generation_confidence
-      - retrieved_chunks → GroundCheckResponse.metadata.retrieved_chunks
+    answer         → GroundCheckResponse.answer
+    citations      → GroundCheckResponse.citations
+    retrieved_chunks → GroundCheckResponse.metadata.retrieved_chunks
+    confidence     → legacy InferenceResponse.confidence (may be None for vLLM path)
     """
-    query: str
-    answer: str
-    citations: List[Citation]
-    confidence: Optional[ConfidenceMetrics]
-    model_name: str
-    retrieved_chunks: int
+    query:              str
+    answer:             str
+    citations:          List[Citation]
+    confidence:         Optional[ConfidenceMetrics]
+    model_name:         str
+    retrieved_chunks:   int
     processing_time_ms: int
-    prompt_used: str = field(repr=False)  # full rendered prompt, useful for debugging
-    explanation: str
+    prompt_used:        str = field(repr=False)  # for debugging / audit
 
     def citations_as_dicts(self) -> List[dict]:
         """Serialize citations to GroundCheck JSON schema shape."""
@@ -137,69 +106,24 @@ class RAGResponse:
 
 
 # ---------------------------------------------------------------------------
-# LangChain-compatible wrappers for existing components
-# ---------------------------------------------------------------------------
-
-def _make_retriever_runnable(pipeline: RetrievalPipeline, top_k: int):
-    """
-    Wrap RetrievalPipeline.retrieve() as a LangChain RunnableLambda.
-    Input:  str (query)
-    Output: List[Citation]
-    """
-    return RunnableLambda(lambda query: pipeline.retrieve(query, top_k=top_k))
-
-
-def _make_context_formatter(pipeline: RetrievalPipeline):
-    """
-    Wrap RetrievalPipeline.format_context() as a RunnableLambda.
-    Input:  List[Citation]
-    Output: str  (formatted context block for prompt injection)
-    """
-    return RunnableLambda(pipeline.format_context)
-
-
-def _make_llm_runnable(model_svc, db_session):
-    """
-    Wrap ModelService.generate() as a RunnableLambda.
-    Input:  str (rendered prompt string)
-    Output: InferenceResponse
-    """
-    def _call(prompt_str: str):
-        request = InferenceRequest(prompt=prompt_str)
-        return model_svc.generate(request, db_session)
-
-    return RunnableLambda(_call)
-
-
-# ---------------------------------------------------------------------------
 # RAGOrchestrator
 # ---------------------------------------------------------------------------
 
 class RAGOrchestrator:
     """
-    Orchestrates the full RAG pipeline using LangChain LCEL composition.
+    Orchestrates the RAG pipeline: Retrieve → Prompt → Generate.
 
-    Pipeline flow
-    -------------
-    query (str)
-      │
-      ├─► Retriever          → List[Citation]
-      │        │
-      │        └─► ContextFormatter → str (context block)
-      │
-      ├─► PromptTemplate     → ChatPromptValue  (system + user messages)
-      │
-      ├─► LLM                → InferenceResponse
-      │
-      └─► OutputParser       → RAGResponse
+    Confidence scoring is NOT done here — it is performed by
+    confidence/engine.py in the router after run() returns, so that
+    the confidence result is available for both response building and
+    database logging without duplicating the computation.
 
     Parameters
     ----------
     retrieval_pl : RetrievalPipeline
         Instance to use for retrieval. Defaults to the module singleton.
     model_svc : ModelService | None
-        Instance to use for generation. If None, run() raises unless
-        called via run_retrieval_only().
+        Instance to use for generation. If None, run() raises RuntimeError.
     similarity_threshold : float
         Passed through to the retrieval pipeline.
     """
@@ -213,7 +137,7 @@ class RAGOrchestrator:
         self._retrieval = retrieval_pl or RetrievalPipeline(
             similarity_threshold=similarity_threshold
         )
-        self._model_svc = model_svc  # injected; avoids loading model at import time
+        self._model_svc = model_svc  # injected in main.py lifespan
         self._output_parser = StrOutputParser()
 
     # ------------------------------------------------------------------
@@ -231,36 +155,33 @@ class RAGOrchestrator:
 
         Parameters
         ----------
-        query : str
-            User's natural language question.
-        db_session : sqlalchemy.orm.Session
-            Active DB session passed through to ModelService for logging.
-        top_k : int
-            Number of chunks to retrieve.
+        query      : User's natural language question.
+        db_session : Active SQLAlchemy session (passed to ModelService).
+        top_k      : Number of chunks to retrieve.
 
         Returns
         -------
-        RAGResponse
+        RAGResponse with answer, citations, model metadata, and timing.
+        Confidence scoring is left to the caller (routers/query.py).
         """
         if self._model_svc is None:
             raise RuntimeError(
                 "RAGOrchestrator has no model_svc. "
-                "Pass a ModelService instance to the constructor."
+                "Inject a ModelService instance before calling run()."
             )
 
         t_start = time.monotonic()
 
         # Step 1 — Retrieve
         citations = self._retrieval.retrieve(query, top_k=top_k)
-        context = self._retrieval.format_context(citations)
+        context   = self._retrieval.format_context(citations)
 
         # Step 2 — Build prompt
-        prompt_template = RAG_CHAT_PROMPT if citations else NO_CONTEXT_PROMPT
+        prompt_template  = RAG_CHAT_PROMPT if citations else NO_CONTEXT_PROMPT
         rendered_messages = prompt_template.format_messages(
             context=context,
             question=query,
         )
-        # Flatten to a single string for ModelService (which takes a prompt str)
         prompt_str = "\n".join(
             f"{m.type.upper()}: {m.content}" for m in rendered_messages
         )
@@ -270,26 +191,6 @@ class RAGOrchestrator:
             InferenceRequest(prompt=prompt_str),
             db_session,
         )
-
-        # Step 4 - Explanation
-        explanation = ""
-        if inference_response.confidence:
-            explanation_messages = FULL_METRIC_EXPLANATION_PROMPT.format_messages(
-                question=query,
-                answer=inference_response.generated_text,
-                confidence_scores=str(inference_response.confidence.score)
-            )
-            explanation_prompt_str = "\n".join(
-            f"{m.type.upper()}: {m.content}" for m in explanation_messages
-            )   
-            explanation_response = self._model_svc.generate(
-                InferenceRequest(prompt=explanation_prompt_str),
-                db_session,
-            )
-            explanation = explanation_response.generated_text
-        else:
-            explanation = "No score was provided for explanation."
-
 
         processing_time_ms = int((time.monotonic() - t_start) * 1000)
 
@@ -302,7 +203,6 @@ class RAGOrchestrator:
             retrieved_chunks=len(citations),
             processing_time_ms=processing_time_ms,
             prompt_used=prompt_str,
-            explanation=explanation
         )
 
     # ------------------------------------------------------------------
@@ -321,48 +221,12 @@ class RAGOrchestrator:
         return self._retrieval.retrieve(query, top_k=top_k)
 
     # ------------------------------------------------------------------
-    # LCEL chain (for inspection / future streaming use)
-    # ------------------------------------------------------------------
-
-    def build_chain(self, top_k: int = 5):
-        """
-        Build and return the full LCEL chain.
-
-        The chain takes a dict {"question": str} and returns a rendered
-        prompt string. Useful for inspecting the pipeline or hooking into
-        LangChain tooling (e.g. LangSmith tracing).
-
-        Note: LLM generation is NOT included in the LCEL chain because
-        ModelService.generate() requires a db_session that isn't known
-        at chain-build time. The chain produces the final prompt string;
-        pass that to model_svc.generate() manually if needed.
-        """
-        retriever = _make_retriever_runnable(self._retrieval, top_k)
-        formatter = _make_context_formatter(self._retrieval)
-
-        chain = (
-            RunnablePassthrough.assign(
-                citations=lambda x: retriever.invoke(x["question"]),
-            )
-            | RunnablePassthrough.assign(
-                context=lambda x: formatter.invoke(x["citations"]),
-            )
-            | RunnablePassthrough.assign(
-                prompt=lambda x: RAG_CHAT_PROMPT.format_messages(
-                    context=x["context"],
-                    question=x["question"],
-                )
-            )
-        )
-        return chain
-
-    # ------------------------------------------------------------------
     # Prompt rendering (for debugging / unit tests)
     # ------------------------------------------------------------------
 
     def render_prompt(self, query: str, citations: List[Citation]) -> str:
         """Return the rendered prompt string without running the LLM."""
-        context = self._retrieval.format_context(citations)
+        context  = self._retrieval.format_context(citations)
         template = RAG_CHAT_PROMPT if citations else NO_CONTEXT_PROMPT
         messages = template.format_messages(context=context, question=query)
         return "\n".join(f"{m.type.upper()}: {m.content}" for m in messages)
@@ -370,12 +234,7 @@ class RAGOrchestrator:
 
 # ---------------------------------------------------------------------------
 # Module-level singleton
-# Note: model_svc is NOT set here to avoid loading the LLM at import time.
-# In main.py / routers, inject it after the model is loaded:
-#
-#   from rag_orchestrator import rag_orchestrator
-#   from services.model_service import model_executor
-#   rag_orchestrator._model_svc = model_executor
+# model_svc is injected in main.py lifespan to avoid loading the LLM at import.
 # ---------------------------------------------------------------------------
 
 rag_orchestrator = RAGOrchestrator(
