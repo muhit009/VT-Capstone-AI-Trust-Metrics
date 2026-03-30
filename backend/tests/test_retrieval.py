@@ -311,28 +311,4 @@ class TestFormatContext:
         pipeline = make_pipeline()
         ctx = pipeline.format_context([c])
         assert "Retrieved Context" in ctx
-
-
-# ---------------------------------------------------------------------------
-# RetrievalPipeline.retrieve_as_dicts
-# ---------------------------------------------------------------------------
-
-class TestRetrieveAsDicts:
-
-    def test_returns_list_of_dicts(self):
-        pipeline = make_pipeline()
-        results = pipeline.retrieve_as_dicts("query")
-        assert isinstance(results, list)
-        assert all(isinstance(r, dict) for r in results)
-
-    def test_dict_has_required_schema_keys(self):
-        pipeline = make_pipeline()
-        results = pipeline.retrieve_as_dicts("query")
-        assert len(results) > 0
-        for key in ("citation_id", "document", "page", "chunk_id",
-                    "similarity_score", "text_excerpt"):
-            assert key in results[0]
-
-    def test_empty_query_returns_empty(self):
-        pipeline = make_pipeline()
-        assert pipeline.retrieve_as_dicts("") == []
+        

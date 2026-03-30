@@ -1,4 +1,3 @@
-import json
 import chardet
 import pdfplumber
 from pathlib import Path
@@ -11,7 +10,6 @@ MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 # Create upload directory structure on import
 (UPLOAD_DIR / "pdfs").mkdir(parents=True, exist_ok=True)
 (UPLOAD_DIR / "texts").mkdir(parents=True, exist_ok=True)
-(UPLOAD_DIR / "extracted").mkdir(parents=True, exist_ok=True)
 
 
 def validate_file(filename: str, content: bytes) -> None:
@@ -87,21 +85,13 @@ def ingest_file(filename: str, content: bytes) -> Dict:
     validate_file(filename, content)
     ext = Path(filename).suffix.lower()
 
-    # Save original file
+    # Save original file for audit purposes and re-ingestion
     if ext == ".pdf":
         file_path = UPLOAD_DIR / "pdfs" / filename
     else:
         file_path = UPLOAD_DIR / "texts" / filename
     file_path.write_bytes(content)
 
-    # Extract text
     if ext == ".pdf":
-        doc_data = extract_text_from_pdf(file_path)
-    else:
-        doc_data = extract_text_from_txt(file_path)
-
-    # Persist extracted text as JSON
-    extracted_path = UPLOAD_DIR / "extracted" / f"{Path(filename).stem}.json"
-    extracted_path.write_text(json.dumps(doc_data, indent=2), encoding="utf-8")
-
-    return doc_data
+        return extract_text_from_pdf(file_path)
+    return extract_text_from_txt(file_path)

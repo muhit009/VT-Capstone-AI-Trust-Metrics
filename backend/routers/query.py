@@ -24,7 +24,7 @@ import time
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query as QueryParam
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status as http_status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -38,8 +38,6 @@ from response_models import (
     GroundCheckResponse,
     ResponseBuilder,
     ErrorCode,
-    ConfidenceTier,
-    ResponseStatus,
 )
 from confidence.engine import confidence_engine
 from confidence.grounding_scorer import grounding_scorer

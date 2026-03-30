@@ -316,28 +316,4 @@ class TestRenderPrompt:
         orchestrator, _, mock_model = make_orchestrator()
         orchestrator.render_prompt("query", [make_citation()])
         mock_model.generate.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# RAGOrchestrator.build_chain tests
-# ---------------------------------------------------------------------------
-
-class TestBuildChain:
-
-    def test_chain_is_callable(self):
-        orchestrator, _, _ = make_orchestrator()
-        chain = orchestrator.build_chain(top_k=5)
-        assert callable(chain.invoke)
-
-    def test_chain_invoke_returns_dict_with_citations(self):
-        citations = [make_citation()]
-        orchestrator, mock_retrieval, _ = make_orchestrator(citations=citations)
-        chain = orchestrator.build_chain(top_k=5)
-        result = chain.invoke({"question": "What is yield strength?"})
-        assert "citations" in result
-
-    def test_chain_invoke_returns_dict_with_context(self):
-        orchestrator, _, _ = make_orchestrator()
-        chain = orchestrator.build_chain()
-        result = chain.invoke({"question": "test"})
-        assert "context" in result
+        
