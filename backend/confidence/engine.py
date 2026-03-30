@@ -19,7 +19,7 @@ from typing import Optional
 
 from .grounding_scorer        import grounding_scorer
 from .generation_confidence   import generation_confidence_scorer
-from .fusion                  import fuse, FusionResult
+from .fusion                  import fuse
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ class ConfidenceEngine:
             logger.error("Gen confidence scorer failed: %s", e, exc_info=True)
 
         # --- Fusion ---------------------------------------------------------
-        fusion: FusionResult = fuse(grounding_score, gen_confidence)
+        fusion = fuse(grounding_score, gen_confidence)
         logger.info("Fusion result: score=%d tier=%s degraded=%s",
                     fusion.score, fusion.tier, fusion.degraded)
 

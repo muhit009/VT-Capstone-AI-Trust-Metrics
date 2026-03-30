@@ -9,9 +9,9 @@ Formula (from confidence_signals.md):
     score          = clip( (raw_mean_prob - 0.3) / 0.6, 0.0, 1.0 )
 
 Confidence levels (applied to raw_mean_prob before normalization):
-    HIGHLY_CONFIDENT : raw_mean > 0.8
-    MODERATE         : 0.5 < raw_mean <= 0.8
-    UNCERTAIN        : raw_mean <= 0.5
+    HIGHLY_CONFIDENT : raw_mean > GEN_CONF_HIGHLY_CONFIDENT_THRESHOLD  (default 0.8)
+    MODERATE         : raw_mean > GEN_CONF_MODERATE_THRESHOLD           (default 0.5)
+    UNCERTAIN        : raw_mean <= GEN_CONF_MODERATE_THRESHOLD
 
 Normalization constants [0.3, 0.9] are provisional and will be calibrated
 against real HPC runs in Sprint 4.
@@ -22,7 +22,12 @@ import math
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .config import GEN_CONF_RAW_MIN, GEN_CONF_RAW_MAX
+from .config import (
+    GEN_CONF_RAW_MIN,
+    GEN_CONF_RAW_MAX,
+    GEN_CONF_HIGHLY_CONFIDENT_THRESHOLD,
+    GEN_CONF_MODERATE_THRESHOLD,
+)
 
 # ---------------------------------------------------------------------------
 # Mistral special tokens — filtered before computing mean probability
@@ -39,9 +44,9 @@ UNCERTAIN        = "UNCERTAIN"
 
 
 def _classify(raw_mean: float) -> str:
-    if raw_mean > 0.8:
+    if raw_mean > GEN_CONF_HIGHLY_CONFIDENT_THRESHOLD:
         return HIGHLY_CONFIDENT
-    if raw_mean > 0.5:
+    if raw_mean > GEN_CONF_MODERATE_THRESHOLD:
         return MODERATE
     return UNCERTAIN
 
