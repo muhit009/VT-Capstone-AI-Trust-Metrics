@@ -7,7 +7,9 @@
       "Bash(npx vite build)",
       "Bash(ls -la /Users/ethando/Desktop/VT-Capstone-AI-Trust-Metrics/frontend/.env*)",
       "Bash(npm run typecheck)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(npm install:*)",
+      "Bash(npx vitest:*)"
     ]
   }
 }
