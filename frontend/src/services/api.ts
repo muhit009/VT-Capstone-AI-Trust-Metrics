@@ -118,3 +118,23 @@ export const queryService = {
   submit: (request: RAGInferenceRequest) =>
     apiClient.post('/v1/rag/query', request) as Promise<GroundCheckResponse>,
 };
+
+// ── Feedback types ────────────────────────────────────────────────────────────
+
+export type FeedbackRating = 'helpful' | 'unhelpful';
+
+export interface FeedbackRequest {
+  query_id: string;
+  rating: FeedbackRating;
+  comment?: string;
+}
+
+export interface FeedbackResponse {
+  feedback_id: string;
+  status: string;
+}
+
+export const feedbackService = {
+  submit: (request: FeedbackRequest) =>
+    apiClient.post('/v1/feedback', request) as Promise<FeedbackResponse>,
+};

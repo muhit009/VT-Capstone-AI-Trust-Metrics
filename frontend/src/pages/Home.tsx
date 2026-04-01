@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import QueryInput from '../components/common/QueryInput';
+import FeedbackWidget from '../components/common/FeedbackWidget';
 import type { GroundCheckResponse } from '../services/api';
 
 function Home() {
@@ -60,6 +61,10 @@ function Home() {
               {result.error.message}
             </p>
           )}
+
+          <div className="rounded-md border border-gray-200 bg-white p-4 shadow-sm">
+            <FeedbackWidget queryId={result.query_id} />
+          </div>
         </section>
       )}
     </div>
