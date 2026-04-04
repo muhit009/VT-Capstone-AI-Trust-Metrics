@@ -1,0 +1,16 @@
+# Confidence Engine dependencies
+# Install inside the venv: pip install -r requirements.txt
+
+# HTTP client for Ollama API
+requests
+
+# NLI model for Grounding Score (Signal 1)
+transformers>=4.40.0
+torch               # CPU-only is fine; GPU not needed for DeBERTa
+sentence-transformers
+
+# Claim extraction
+nltk
+
+# Utilities
+numpy

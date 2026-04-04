@@ -1,0 +1,493 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "model_version": "confidence_model.md v1.1",
+    "description": "Comprehensive edge case documentation for the GroundCheck confidence engine. Each entry documents the trigger condition, expected system behavior, affected components, test assertions, and UI implications.",
+    "source_document": "confidence_model.md Section 8 (Edge Cases) + implementation analysis of engine.py, grounding_scorer.py, generation_confidence.py, fusion.py"
+  },
+
+  "edge_cases": [
+
+    {
+      "id": "EC-001",
+      "name": "No relevant documents retrieved (empty chunks)",
+      "category": "retrieval_failure",
+      "severity": "HIGH",
+      "trigger": {
+        "condition": "chunks = [] (empty list passed to confidence_engine.score())",
+        "how_it_happens": "Retriever finds no documents with similarity above threshold, or ChromaDB collection is empty, or vector store connection fails after initial query."
+      },
+      "affected_signal": "grounding_score",
+      "system_behavior": {
+        "grounding_scorer": "chunks[:5] = []. NLI pairs loop is empty. max_entailment = 0.0 for all claims. grounding_score = 0.0.",
+        "generation_confidence": "Unaffected. Runs normally on logprobs.",
+        "fusion": "fuse(0.0, gen_conf) — normal path, not degraded. Score = round(0.3 * gen_conf * 100).",
+        "degraded_flag": false,
+        "expected_tier": "LOW (score <= 30 given gen_conf <= 1.0)",
+        "expected_score_range": "0–30"
+      },
+      "score_calculation": {
+        "grounding_contribution": 0.0,
+        "gen_conf_max_contribution": 30.0,
+        "max_possible_score": 30,
+        "note": "Maximum possible score with zero grounding is 30 (when gen_conf_norm=1.0). Always LOW."
+      },
+      "ui_implications": {
+        "warning_to_show": "Retrieved documents may not cover this query.",
+        "action": "The system should check whether the retriever returned chunks before calling the confidence engine, and surface a retrieval warning separately from the confidence score.",
+        "do_not_infer": "A LOW score from empty chunks does NOT mean the answer is wrong — it means it cannot be verified. The distinction is important for user trust."
+      },
+      "assertions": [
+        "result['confidence']['tier'] == 'LOW'",
+        "result['confidence']['final_score'] <= 30",
+        "result['confidence']['signals']['grounding_score'] == 0.0",
+        "result['confidence']['degraded'] == False"
+      ],
+      "test_case_reference": "TC-006"
+    },
+
+    {
+      "id": "EC-002",
+      "name": "Answer is correct but topic is not in the knowledge base",
+      "category": "knowledge_gap",
+      "severity": "MEDIUM",
+      "trigger": {
+        "condition": "Model generates a factually correct answer using training knowledge, but retrieved chunks do not cover the query topic.",
+        "how_it_happens": "HR, legal, or general knowledge queries against a domain-specific KB (e.g., engineering specs). Model correctly recalls general knowledge but KB has no relevant documents."
+      },
+      "affected_signal": "grounding_score",
+      "system_behavior": {
+        "grounding_scorer": "All claims have max_entailment ≈ 0.0. grounding_score ≈ 0.0.",
+        "generation_confidence": "May be moderate-to-high since model confidently recalls factual knowledge.",
+        "fusion": "Score dominated by grounding weight → LOW despite high gen confidence.",
+        "degraded_flag": false,
+        "expected_tier": "LOW",
+        "expected_score_range": "0–30"
+      },
+      "design_intent": "This is INTENDED behavior per confidence_model.md Section 2. GroundCheck measures groundedness relative to retrieved documents, NOT absolute factual correctness. A correct answer that cannot be verified against the KB should be flagged as LOW — users must know the answer is not traceable to documents.",
+      "boeing_relevance": "In Boeing's context, an answer about FLSA overtime rules may be technically correct but Boeing-specific policy may differ. Users must consult the authoritative source (HR), not a general model answer.",
+      "ui_implications": {
+        "warning_to_show": "This answer could not be verified against the knowledge base.",
+        "do_not_say": "Do not tell users 'this answer is wrong' — say 'this answer is not grounded in the retrieved documents'."
+      },
+      "assertions": [
+        "result['confidence']['tier'] == 'LOW'",
+        "result['confidence']['signals']['grounding_score'] < 0.1"
+      ],
+      "test_case_reference": "TC-003"
+    },
+
+    {
+      "id": "EC-003",
+      "name": "High grounding score + low generation confidence",
+      "category": "signal_divergence",
+      "severity": "LOW",
+      "trigger": {
+        "condition": "grounding_score is high (e.g., 0.85+) but gen_confidence_normalized is low (e.g., < 0.30)",
+        "how_it_happens": "Retrieved documents are relevant and claims are well-supported, but the model's token probabilities are spread across many alternatives during generation — model found the right documents but struggled to synthesize a coherent answer."
+      },
+      "affected_signal": "gen_confidence",
+      "system_behavior": {
+        "grounding_scorer": "Returns high score, e.g., 0.85.",
+        "generation_confidence": "Returns low normalized score, e.g., 0.20 (raw_mean_prob ≈ 0.42, UNCERTAIN level).",
+        "fusion": "Score = round((0.7 * 0.85 + 0.3 * 0.20) * 100) = round(59.5 + 6.0) = round(65.5) = 66 → MEDIUM",
+        "degraded_flag": false,
+        "expected_tier": "MEDIUM",
+        "expected_score_range": "60–72 (depending on exact signal values)"
+      },
+      "score_example": {
+        "grounding_score": 0.85,
+        "gen_conf_normalized": 0.20,
+        "grounding_contribution": 59.5,
+        "gen_conf_contribution": 6.0,
+        "score": 66,
+        "tier": "MEDIUM"
+      },
+      "interpretation": "Model found the right documents but was uncertain during synthesis. The high grounding score suggests the answer content is largely correct, but the answer phrasing or structure may not be ideal. MEDIUM score is appropriate — proceed with verification.",
+      "ui_implications": {
+        "message": "Source documents support the claims but model showed uncertainty during generation. Review the source citations.",
+        "note": "This is a relatively benign case — the grounding signal provides good coverage. The uncertainty may reflect technical vocabulary or complex synthesis."
+      },
+      "assertions": [
+        "result['confidence']['tier'] in ('MEDIUM', 'HIGH')",
+        "result['confidence']['signals']['grounding_score'] > 0.7",
+        "result['confidence']['signals']['generation_confidence'] < 0.3"
+      ]
+    },
+
+    {
+      "id": "EC-004",
+      "name": "High generation confidence + low grounding score (dangerous pattern)",
+      "category": "signal_divergence",
+      "severity": "CRITICAL",
+      "trigger": {
+        "condition": "gen_confidence_normalized is high (e.g., 0.80+) but grounding_score is low (e.g., < 0.15)",
+        "how_it_happens": "Model generates an answer with high internal certainty but the answer is NOT supported by retrieved documents — hallucination. The model is 'confidently wrong'."
+      },
+      "affected_signal": "grounding_score",
+      "system_behavior": {
+        "grounding_scorer": "Returns low score, e.g., 0.00–0.15.",
+        "generation_confidence": "Returns high normalized score, e.g., 0.80 (HIGHLY_CONFIDENT).",
+        "fusion": "Score = round((0.7 * 0.05 + 0.3 * 0.80) * 100) = round(3.5 + 24.0) = round(27.5) = 28 → LOW",
+        "degraded_flag": false,
+        "expected_tier": "LOW",
+        "expected_score_range": "0–30"
+      },
+      "score_example": {
+        "grounding_score": 0.05,
+        "gen_conf_normalized": 0.80,
+        "grounding_contribution": 3.5,
+        "gen_conf_contribution": 24.0,
+        "score": 28,
+        "tier": "LOW"
+      },
+      "design_intent": "This is EXACTLY the case the 70/30 weight split is designed to catch. A model that is confidently wrong is MORE dangerous than one that is visibly uncertain. The 70% grounding weight ensures LOW grounding always produces a LOW final score regardless of gen confidence. See confidence_model.md Example 3 and Section 5.2.",
+      "boeing_relevance": "In a safety-critical aerospace context, a confidently hallucinated torque spec or safety procedure could cause injury or equipment damage. The system must not give a HIGH or MEDIUM score to an ungrounded answer just because the model generated it with high token confidence.",
+      "ui_implications": {
+        "warning_to_show": "Model generated this answer with high certainty, but it is NOT supported by the retrieved documents. This may indicate hallucination.",
+        "action": "Do not use. Consult source documentation directly.",
+        "flag": "Surface both the grounding_score and gen_confidence signals separately so users understand the divergence."
+      },
+      "assertions": [
+        "result['confidence']['tier'] == 'LOW'",
+        "result['confidence']['final_score'] < 40",
+        "result['confidence']['signals']['grounding_score'] < 0.2",
+        "result['confidence']['signals']['generation_confidence'] > 0.7"
+      ],
+      "test_case_reference": "TC-003 (partial — gen confidence is MODERATE in that example; a stronger version has gen_conf=HIGHLY_CONFIDENT)"
+    },
+
+    {
+      "id": "EC-005",
+      "name": "Conflicting information across retrieved chunks",
+      "category": "knowledge_conflict",
+      "severity": "MEDIUM",
+      "trigger": {
+        "condition": "Two or more retrieved chunks contain contradictory information about the same fact (e.g., different revisions of the same spec with different values).",
+        "how_it_happens": "Knowledge base contains multiple document revisions. Retriever returns both. One chunk entails the claim, another contradicts it."
+      },
+      "affected_signal": "grounding_score",
+      "system_behavior": {
+        "grounding_scorer": "NLI assigns moderate entailment from the supporting chunk, but the contradicting chunk may reduce trust. The max() operation selects the best-supporting chunk — the contradicting chunk is ignored in scoring. grounding_score may appear falsely high if the correct (but outdated) chunk is the best match.",
+        "generation_confidence": "Unaffected.",
+        "fusion": "Score may be MEDIUM or HIGH depending on how many other claims are uncontested.",
+        "degraded_flag": false,
+        "key_risk": "The grounding_score formula uses max() over chunks — it selects the BEST supporting chunk per claim, not the most authoritative. An outdated document with matching text can produce high entailment even if a newer document supersedes it."
+      },
+      "known_limitation": "The current NLI-based grounding scorer cannot distinguish document recency or authority. A claim supported by Rev A will score high even if Rev B supersedes it. This is a known limitation (confidence_model.md A1: 'If documents are incorrect, outdated, HIGH confidence reflects adherence to those flawed documents').",
+      "mitigation": {
+        "short_term": "Ensure the knowledge base only contains current document revisions. Document curation is the responsibility of the KB admin.",
+        "long_term": "Add document metadata (revision date, status) and weight entailment scores by document recency in a future model version."
+      },
+      "ui_implications": {
+        "warning_to_show": "Conflicting information found in source documents. Review all cited sources before acting.",
+        "action": "Surface all retrieved chunks in the citation panel and flag conflicting passages. Do not rely on score alone."
+      },
+      "assertions": [
+        "result['confidence']['tier'] in ('MEDIUM', 'HIGH')",
+        "result['confidence']['signals']['grounding_score'] > 0.0",
+        "result['confidence']['degraded'] == False"
+      ],
+      "test_case_reference": "TC-010"
+    },
+
+    {
+      "id": "EC-006",
+      "name": "Answer is a refusal or clarification request (N=0 claims)",
+      "category": "no_content",
+      "severity": "LOW",
+      "trigger": {
+        "condition": "Answer is a short refusal ('I don't know.'), clarification question ('Could you clarify?'), or out-of-scope message with fewer than MIN_CLAIM_WORDS=5 words per extracted segment.",
+        "how_it_happens": "Model declines to answer, asks for more context, or generates a response too short to contain verifiable claims."
+      },
+      "affected_signal": "grounding_score",
+      "system_behavior": {
+        "grounding_scorer": "NLTK splits answer into segments. All segments are shorter than MIN_CLAIM_WORDS. claims = []. Returns GroundingResult(grounding_score=0.0, num_claims=0, supported_claims=0). Logs a warning.",
+        "generation_confidence": "Runs on the (short) logprob sequence. May return an elevated score because short common token sequences have high probabilities.",
+        "fusion": "fuse(0.0, gen_conf) → LOW tier. Score = round(0.3 * gen_conf * 100).",
+        "degraded_flag": false,
+        "expected_tier": "LOW",
+        "note_on_warning": "grounding_scorer logs a warning but does NOT set degraded=True or return None. This is NOT a system failure — it is correct scoring behavior."
+      },
+      "design_intent": "A refusal correctly scores LOW — the system accurately signals it cannot answer. This is better than a silent failure.",
+      "ui_implications": {
+        "warning_to_show": "No verifiable claims found in the answer.",
+        "action": "The system correctly communicates its inability to answer. No escalation needed beyond directing users to source documentation.",
+        "distinguish_from_error": "num_claims=0 is NOT the same as degraded=True. It means the answer had no extractable claims, not that the scoring system failed."
+      },
+      "code_path": "grounding_scorer.py line 98-104: if not claims: return GroundingResult(grounding_score=0.0, num_claims=0, supported_claims=0)",
+      "assertions": [
+        "result['confidence']['tier'] == 'LOW'",
+        "result['confidence']['signals']['grounding_score'] == 0.0",
+        "result['confidence']['degraded'] == False"
+      ],
+      "test_case_reference": "TC-007"
+    },
+
+    {
+      "id": "EC-007",
+      "name": "Very short answer (1–2 tokens) — artificially elevated gen confidence",
+      "category": "known_limitation",
+      "severity": "MEDIUM",
+      "trigger": {
+        "condition": "Answer is 1–3 tokens long (e.g., 'Yes.', '45 N·m.', 'True.').",
+        "how_it_happens": "Simple yes/no queries, confirmation queries, or over-confident LLM responses."
+      },
+      "affected_signal": "gen_confidence",
+      "system_behavior": {
+        "grounding_scorer": "If answer has < MIN_CLAIM_WORDS words, num_claims=0, grounding_score=0.0.",
+        "generation_confidence": "Mean of 1–3 high-probability common tokens. Likely normalized to 0.8–1.0 (HIGHLY_CONFIDENT). This is NOT because the model is globally confident — it's because short common tokens inherently have high probability.",
+        "fusion": "Score = round(0.3 * gen_conf * 100) ≈ 24–30 → LOW.",
+        "degraded_flag": false,
+        "expected_tier": "LOW (grounding=0 dominates)"
+      },
+      "known_limitation_reference": "confidence_model.md Section 9.2 L2 and edge case table: 'Very short answer (1–2 tokens): Gen confidence may be artificially elevated — flagged as a known limitation.'",
+      "mitigation": {
+        "scoring": "The 70% grounding weight contains the damage — even with gen_conf=1.0, max score from gen_conf alone is 30 (LOW).",
+        "ui": "When num_claims=0 and gen_confidence_level=HIGHLY_CONFIDENT, surface an additional note: 'Short answer — confidence score based on limited signal.'"
+      },
+      "assertions": [
+        "result['confidence']['tier'] == 'LOW'",
+        "result['confidence']['signals']['grounding_score'] == 0.0",
+        "result['confidence']['signals']['generation_confidence'] >= 0.8",
+        "result['confidence']['final_score'] <= 30"
+      ],
+      "test_case_reference": "TC-011"
+    },
+
+    {
+      "id": "EC-008",
+      "name": "Very long answer — stable gen confidence via averaging",
+      "category": "expected_behavior",
+      "severity": "INFO",
+      "trigger": {
+        "condition": "Answer is very long (200+ tokens, e.g., multi-step procedures, comprehensive summaries).",
+        "how_it_happens": "Complex queries requiring multi-step answers or comprehensive summaries."
+      },
+      "affected_signal": "gen_confidence",
+      "system_behavior": {
+        "grounding_scorer": "More claims extracted → more NLI pairs → more computation. Score is still mean entailment across all claims.",
+        "generation_confidence": "Mean token probability remains stable across long sequences due to averaging. Technical vocabulary tokens (part numbers, spec codes) naturally have lower probabilities but are averaged over the full sequence.",
+        "fusion": "No special handling needed.",
+        "degraded_flag": false
+      },
+      "design_intent": "confidence_model.md explicitly documents this: 'Very long answer: Mean token probability remains stable via averaging — no special handling needed.' The mean is robust to individual low-probability tokens.",
+      "performance_note": "Long answers increase NLI computation time linearly. A 20-claim answer requires 20×5=100 NLI inference calls. Monitor latency for answers > 15 claims.",
+      "assertions": [
+        "result['confidence']['degraded'] == False",
+        "result['confidence']['signals']['generation_confidence'] > 0.0"
+      ]
+    },
+
+    {
+      "id": "EC-009",
+      "name": "Grounding signal fails (scorer exception) — degraded mode",
+      "category": "system_failure",
+      "severity": "HIGH",
+      "trigger": {
+        "condition": "grounding_scorer.compute() raises an exception (e.g., DeBERTa model load failure, OOM, NLTK data missing).",
+        "how_it_happens": "Model weights not downloaded, insufficient CPU memory, or corrupted NLTK punkt tokenizer data."
+      },
+      "affected_signal": "grounding_score",
+      "system_behavior": {
+        "engine": "try/except in engine.py lines 77-86 catches the exception. grounding_score=None. Execution continues.",
+        "fusion": "fuse(None, gen_confidence) → degraded path: score = round(gen_confidence * 100). grounding_contribution=0.0. gen_conf_contribution = gen_confidence * 100.",
+        "degraded_flag": true,
+        "warning": "Grounding score unavailable. Using Generation Confidence only.",
+        "expected_tier": "Depends on gen_confidence value. Score range: 0–100.",
+        "risk": "A degraded grounding score removes the primary safeguard against hallucination. Gen confidence alone cannot detect ungrounded claims. Degraded scores are LESS reliable than normal scores of the same value."
+      },
+      "ui_implications": {
+        "warning_to_show": "⚠️ Grounding signal unavailable. Score reflects generation confidence only and may not detect hallucination.",
+        "action": "Always display the degraded=True flag prominently. Do not allow degraded HIGH scores to be used without explicit user acknowledgment.",
+        "logging": "Log grounding scorer failures to the audit trail for post-hoc review."
+      },
+      "code_path": "engine.py lines 74-86, fusion.py lines 111-123",
+      "assertions": [
+        "result['confidence']['degraded'] == True",
+        "result['confidence']['warnings'] == ['Grounding score unavailable. Using Generation Confidence only.']",
+        "result['confidence']['signals']['grounding_score'] is None",
+        "result['confidence']['weights']['grounding'] == 0.0",
+        "result['confidence']['weights']['generation'] == 1.0",
+        "result['status'] == 'partial_success'",
+        "result['error']['code'] == 'NLI_FAILURE'"
+      ],
+      "test_case_reference": "TC-008"
+    },
+
+    {
+      "id": "EC-010",
+      "name": "Generation confidence signal fails (scorer exception) — degraded mode",
+      "category": "system_failure",
+      "severity": "MEDIUM",
+      "trigger": {
+        "condition": "generation_confidence_scorer.compute() raises an exception (e.g., logprobs=None, malformed logprob values, vLLM API change).",
+        "how_it_happens": "Logprobs not returned by LLM API (misconfigured vLLM, model serving update), or logprobs is None/empty due to upstream error."
+      },
+      "affected_signal": "gen_confidence",
+      "system_behavior": {
+        "engine": "try/except in engine.py lines 88-96 catches the exception. gen_confidence=None. Execution continues.",
+        "fusion": "fuse(grounding_score, None) → degraded path: score = round(grounding_score * 100). gen_conf_contribution=0.0.",
+        "degraded_flag": true,
+        "warning": "Generation confidence unavailable. Using Grounding Score only.",
+        "risk": "Lower risk than EC-009 — grounding is the primary signal. Score is still grounding-based and reflects document support well."
+      },
+      "ui_implications": {
+        "warning_to_show": "Generation confidence signal unavailable. Score reflects document grounding only.",
+        "action": "Display the degraded=True flag. Score is still meaningful since grounding dominates at 70% weight."
+      },
+      "code_path": "engine.py lines 87-96, fusion.py lines 125-137",
+      "assertions": [
+        "result['confidence']['degraded'] == True",
+        "result['confidence']['warnings'] == ['Generation confidence unavailable. Using Grounding Score only.']",
+        "result['confidence']['signals']['generation_confidence'] is None",
+        "result['confidence']['weights']['grounding'] == 1.0",
+        "result['confidence']['weights']['generation'] == 0.0",
+        "result['status'] == 'partial_success'",
+        "result['error']['code'] == 'GENERATION_CONFIDENCE_UNAVAILABLE'"
+      ],
+      "test_case_reference": "TC-009"
+    },
+
+    {
+      "id": "EC-011",
+      "name": "Both signals fail — score=0, tier=LOW",
+      "category": "system_failure",
+      "severity": "CRITICAL",
+      "trigger": {
+        "condition": "Both grounding_scorer.compute() and generation_confidence_scorer.compute() raise exceptions.",
+        "how_it_happens": "Catastrophic failure: DeBERTa OOM + vLLM API disconnected, or both models fail to load at startup."
+      },
+      "affected_signal": "both",
+      "system_behavior": {
+        "engine": "Both try/except blocks catch exceptions. grounding_score=None AND gen_confidence=None.",
+        "fusion": "fuse(None, None) → both-missing path: returns FusionResult(score=0, tier='LOW', degraded=True, warning='Both signals unavailable. Score set to 0.')",
+        "degraded_flag": true,
+        "warning": "Both signals unavailable. Score set to 0.",
+        "expected_score": 0,
+        "expected_tier": "LOW"
+      },
+      "ui_implications": {
+        "warning_to_show": "🔴 System error: confidence scoring unavailable. Do not rely on this answer.",
+        "action": "Escalate to system administrator. Surface a clear error state rather than showing score=0 without context.",
+        "logging": "This event must be logged with full traceback for both signal failures."
+      },
+      "code_path": "fusion.py lines 101-108",
+      "assertions": [
+        "result['confidence']['final_score'] == 0",
+        "result['confidence']['tier'] == 'LOW'",
+        "result['confidence']['degraded'] == True",
+        "result['confidence']['warnings'] == ['Both signals unavailable. Score set to 0.']",
+        "result['confidence']['signals']['grounding_score'] is None",
+        "result['confidence']['signals']['generation_confidence'] is None",
+        "result['status'] == 'partial_success'"
+      ]
+    },
+
+    {
+      "id": "EC-012",
+      "name": "NaN or infinite signal values",
+      "category": "data_quality",
+      "severity": "MEDIUM",
+      "trigger": {
+        "condition": "A signal value is NaN or ±infinity (e.g., from numerical instability in NLI softmax, log(0) in logprobs).",
+        "how_it_happens": "Floating-point edge cases in probability computation. Extremely unlikely token with logprob=-inf (zero probability) or NaN from model output corruption."
+      },
+      "affected_signal": "either",
+      "system_behavior": {
+        "fusion": "_sanitize() in fusion.py detects NaN/inf via math.isnan() and math.isinf(). Treats the affected signal as None → degraded mode.",
+        "degraded_flag": true,
+        "warning": "Grounding score unavailable. Using Generation Confidence only. (or vice versa)",
+        "logged_message": "Invalid signal value detected: {value} — treating as missing"
+      },
+      "code_path": "fusion.py lines 68-75 (_sanitize function)",
+      "assertions": [
+        "result['confidence']['degraded'] == True",
+        "result['confidence']['warnings'] is not None"
+      ]
+    },
+
+    {
+      "id": "EC-013",
+      "name": "Signal values outside [0, 1] range (clipping)",
+      "category": "data_quality",
+      "severity": "LOW",
+      "trigger": {
+        "condition": "A signal value is outside [0, 1] — e.g., 1.05 from floating-point accumulation or -0.01 from normalization edge.",
+        "how_it_happens": "Generation confidence normalization: clip() should handle this, but fusion also clamps via _sanitize(). Grounding score is already bounded by DeBERTa softmax."
+      },
+      "affected_signal": "either",
+      "system_behavior": {
+        "fusion": "_sanitize() applies max(0.0, min(1.0, v)) — clamps to [0, 1] without degraded mode.",
+        "degraded_flag": false,
+        "note": "Values slightly outside [0,1] are silently clamped. No warning is generated unless the value is NaN/inf."
+      },
+      "code_path": "fusion.py line 75: return max(0.0, min(1.0, v))",
+      "assertions": [
+        "result['confidence']['final_score'] >= 0",
+        "result['confidence']['final_score'] <= 100",
+        "result['confidence']['degraded'] == False"
+      ]
+    },
+
+    {
+      "id": "EC-014",
+      "name": "Special tokens in logprob sequence not filtered",
+      "category": "data_quality",
+      "severity": "MEDIUM",
+      "trigger": {
+        "condition": "logprobs contains special tokens (<s>, </s>, [INST], etc.) without corresponding tokens list to filter them, OR tokens list contains unrecognized special tokens not in MISTRAL_SPECIAL_TOKENS.",
+        "how_it_happens": "vLLM returns special tokens in the logprob sequence, or a different model variant uses different special token strings."
+      },
+      "affected_signal": "gen_confidence",
+      "system_behavior": {
+        "generation_confidence_scorer": "If tokens list is provided, special tokens in MISTRAL_SPECIAL_TOKENS are filtered out (num_filtered > 0). If tokens list is NOT provided, no filtering occurs — special tokens pollute the mean calculation.",
+        "impact_without_filtering": "Special tokens typically have low token probabilities → artificially depresses gen_confidence_raw → gen_confidence_normalized is lower than it should be.",
+        "impact_with_wrong_special_token_set": "Unrecognized special tokens are included in the mean calculation."
+      },
+      "code_path": "generation_confidence.py — MISTRAL_SPECIAL_TOKENS frozenset, compute() method token filtering logic",
+      "mitigation": "Always pass the tokens list alongside logprobs when calling generation_confidence_scorer.compute(). Update MISTRAL_SPECIAL_TOKENS if model variant changes.",
+      "assertions": [
+        "result['confidence']['signals']['generation_confidence'] is not None"
+      ],
+      "test_reference": "test_generation_confidence.py::test_special_tokens_filtered"
+    },
+
+    {
+      "id": "EC-015",
+      "name": "Fewer chunks than TOP_K_CHUNKS (partial retrieval)",
+      "category": "partial_retrieval",
+      "severity": "INFO",
+      "trigger": {
+        "condition": "chunks list has 1–4 elements instead of the expected 5 (TOP_K_CHUNKS=5).",
+        "how_it_happens": "KB is small (total documents < 5), or retriever returned fewer results above the similarity threshold."
+      },
+      "affected_signal": "grounding_score",
+      "system_behavior": {
+        "grounding_scorer": "chunks = chunks[:5] effectively a no-op. NLI computes over the available chunks only. Each claim's max_entailment is the best score over fewer chunks — may be lower than with full TOP_K.",
+        "impact": "Grounding score may be slightly underestimated vs. a full KB. This is acceptable — fewer evidence sources = less confidence in grounding.",
+        "degraded_flag": false
+      },
+      "assertions": [
+        "result['confidence']['degraded'] == False",
+        "result['confidence']['signals']['grounding_score'] >= 0.0"
+      ]
+    }
+  ],
+
+  "signal_interaction_matrix": {
+    "_description": "Summary of how all combinations of high/low/missing signals combine to produce tiers. Useful for smoke testing signal behavior.",
+    "cases": [
+      {"grounding": "HIGH (0.9)", "gen_conf": "HIGH (0.9)", "expected_tier": "HIGH",   "score_approx": 90, "notes": "Best case — both signals agree"},
+      {"grounding": "HIGH (0.9)", "gen_conf": "LOW (0.1)",  "expected_tier": "HIGH",   "score_approx": 66, "notes": "Grounding dominates — still HIGH even with low gen conf"},
+      {"grounding": "HIGH (0.9)", "gen_conf": "MISSING",    "expected_tier": "HIGH",   "score_approx": 90, "notes": "Degraded — grounding only, score=round(0.9*100)=90"},
+      {"grounding": "MED (0.5)",  "gen_conf": "HIGH (0.9)", "expected_tier": "MEDIUM", "score_approx": 62, "notes": "High gen conf can't elevate low grounding to HIGH"},
+      {"grounding": "MED (0.5)",  "gen_conf": "MED (0.5)",  "expected_tier": "MEDIUM", "score_approx": 50, "notes": "Both signals moderate"},
+      {"grounding": "LOW (0.1)",  "gen_conf": "HIGH (0.9)", "expected_tier": "LOW",    "score_approx": 34, "notes": "Critical case: confident hallucination → LOW. Grounding wins."},
+      {"grounding": "LOW (0.1)",  "gen_conf": "LOW (0.1)",  "expected_tier": "LOW",    "score_approx": 10, "notes": "Worst normal case — both signals weak"},
+      {"grounding": "ZERO (0.0)", "gen_conf": "HIGH (1.0)", "expected_tier": "LOW",    "score_approx": 30, "notes": "Max score with zero grounding is 30 — always LOW"},
+      {"grounding": "MISSING",    "gen_conf": "HIGH (0.9)", "expected_tier": "HIGH",   "score_approx": 90, "notes": "Degraded — gen conf only, score=round(0.9*100)=90. WARNING: less reliable"},
+      {"grounding": "MISSING",    "gen_conf": "MISSING",    "expected_tier": "LOW",    "score_approx": 0,  "notes": "Both missing — score=0, both-signals-unavailable warning"}
+    ]
+  }
+}

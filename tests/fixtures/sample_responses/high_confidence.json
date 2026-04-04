@@ -1,0 +1,94 @@
+{
+  "_meta": {
+    "description": "Sample HIGH confidence response — Boeing M10 bolt torque specification query",
+    "tier": "HIGH",
+    "score_range": "70–100",
+    "confidence_model_version": "confidence_model.md v1.1",
+    "api_schema_version": "1.0.0",
+    "source": "Derived from confidence_model.md Worked Example 1"
+  },
+
+  "_test_input": {
+    "chunks": [
+      "Table 4: Fastener Specifications (class 8.8) — M10 bolt maximum torque: 45 N·m (dry). For lubricated thread conditions apply torque reduction factor K=0.75.",
+      "Structural bolt installations must reference the current revision of the Fastener Specifications document. Torque values are specified per bolt grade and diameter.",
+      "Class 8.8 bolts are medium-carbon steel bolts suitable for high-stress structural applications. Torque specifications vary by bolt diameter: M8=23 N·m, M10=45 N·m, M12=78 N·m.",
+      "Thread lubrication affects effective clamping force. When lubricants are used, torque values from Table 4 must be adjusted using the K-factor specified in Section 6.2.",
+      "All field installation torque values must be verified against the most recent revision of Fastener_Specifications.pdf prior to use."
+    ],
+    "logprobs": [
+      -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15,
+      -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15, -0.15,
+      -0.45, -0.45, -0.45, -0.45
+    ],
+    "_logprob_note": "20 tokens: 16 at ln(0.861)≈-0.15 (common words), 4 at ln(0.638)≈-0.45 (technical terms). Mean token prob ≈ 0.816."
+  },
+
+  "_score_derivation": {
+    "grounding_norm": "0.89 (DeBERTa entailment avg, already in [0,1])",
+    "gen_conf_raw": 0.816,
+    "gen_conf_norm": "(0.816 - 0.3) / 0.6 = 0.860",
+    "fusion": "round((0.7 × 0.89 + 0.3 × 0.860) × 100) = round(88.1) = 88",
+    "tier_check": "88 >= 70 → HIGH"
+  },
+
+  "query_id": "q_20260319_143210_abc123",
+  "query": "What is the maximum torque specification for M10 bolts in structural applications?",
+  "answer": "The maximum torque specification for M10 class 8.8 bolts in structural applications is 45 N·m. This value applies to dry-thread conditions. For lubricated threads, apply a torque reduction factor of 0.75, resulting in a maximum of approximately 34 N·m. All fastener installations must comply with the values listed in Table 4 of Fastener_Specifications.pdf.",
+  "confidence": {
+    "final_score": 88,
+    "tier": "HIGH",
+    "signals": {
+      "grounding_score": 0.89,
+      "generation_confidence": 0.86
+    },
+    "weights": {
+      "grounding": 0.7,
+      "generation": 0.3
+    },
+    "explanation": "HIGH confidence (score=88). Grounding score: 0.89 (3/3 claims supported by retrieved documents). Generation confidence: 0.86 (HIGHLY_CONFIDENT mean token probability).",
+    "warnings": null,
+    "degraded": false
+  },
+  "citations": [
+    {
+      "citation_id": "fastener_specifications_pdf__chunk_0",
+      "document": "Fastener_Specifications.pdf",
+      "page": 12,
+      "section": "Table 4",
+      "chunk_id": "Fastener_Specifications.pdf__chunk_0",
+      "similarity_score": 0.94,
+      "entailment_score": 0.956,
+      "text_excerpt": "Table 4: Fastener Specifications (class 8.8) — M10 bolt maximum torque: 45 N·m (dry). For lubricated thread conditions apply torque reduction factor K=0.75."
+    },
+    {
+      "citation_id": "fastener_specifications_pdf__chunk_3",
+      "document": "Fastener_Specifications.pdf",
+      "page": 18,
+      "section": "Section 6.2",
+      "chunk_id": "Fastener_Specifications.pdf__chunk_3",
+      "similarity_score": 0.87,
+      "entailment_score": 0.891,
+      "text_excerpt": "Thread lubrication affects effective clamping force. When lubricants are used, torque values from Table 4 must be adjusted using the K-factor specified in Section 6.2."
+    },
+    {
+      "citation_id": "fastener_specifications_pdf__chunk_4",
+      "document": "Fastener_Specifications.pdf",
+      "page": 21,
+      "section": null,
+      "chunk_id": "Fastener_Specifications.pdf__chunk_4",
+      "similarity_score": 0.82,
+      "entailment_score": 0.823,
+      "text_excerpt": "All field installation torque values must be verified against the most recent revision of Fastener_Specifications.pdf prior to use."
+    }
+  ],
+  "metadata": {
+    "model": "mistral-small-24b",
+    "nli_model": "cross-encoder/nli-deberta-v3-small",
+    "timestamp": "2026-03-19T14:32:10Z",
+    "processing_time_ms": 4820,
+    "retrieved_chunks": 5,
+    "schema_version": "1.0.0"
+  },
+  "status": "success"
+}

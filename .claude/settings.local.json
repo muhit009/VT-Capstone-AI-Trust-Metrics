@@ -1,15 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls /Users/ethando/Desktop/VT-Capstone-AI-Trust-Metrics/frontend/.prettier* /Users/ethando/Desktop/VT-Capstone-AI-Trust-Metrics/frontend/.eslint* /Users/ethando/Desktop/VT-Capstone-AI-Trust-Metrics/frontend/tsconfig*)",
-      "Bash(npm install -D typescript@5 @types/react @types/react-dom @typescript-eslint/eslint-plugin @typescript-eslint/parser)",
-      "Bash(npx tsc -p tsconfig.app.json --noEmit)",
-      "Bash(npx vite build)",
-      "Bash(ls -la /Users/ethando/Desktop/VT-Capstone-AI-Trust-Metrics/frontend/.env*)",
-      "Bash(npm run typecheck)",
-      "Bash(npm run build)",
-      "Bash(npm install:*)",
-      "Bash(npx vitest:*)"
+      "Bash(python3 -m pytest tests/test_fusion.py tests/test_generation_confidence.py --tb=short -q)",
+      "Bash(ls venv*)",
+      "Bash(ls .venv*)",
+      "Bash(ls /Users/ethando/Desktop/VT-Capstone-AI-Trust-Metrics/*.md /Users/ethando/Desktop/VT-Capstone-AI-Trust-Metrics/*.json)",
+      "Bash(ls:*)",
+      "Bash(python3:*)"
     ]
   }
 }
