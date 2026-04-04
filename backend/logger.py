@@ -318,7 +318,7 @@ class Logger:
         )
         evidence_row = self.log_evidence(
             db=db,
-            query_row=query_row,
+            answer_row=answer_row,
             content=content,
             source_uri=source_uri,
             relevance_score=relevance_score,

@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models.db_models import Query as QueryModel, Answer as AnswerModel, ConfidenceSignal, Evidence as EvidenceModel
-from backend.logger import query_logger
+from logger import query_logger
 from rag_orchestrator import rag_orchestrator
 from services.model_service import model_executor
 from response_models import (
@@ -359,10 +359,15 @@ async def get_result(
     confidence_tier  = None
     stored_signals   = None
 
-    # Look up Evidence if Answer exists
-    evidence_row: Optional[EvidenceModel] = (
-
-    )
+    # Look up most recent Evidence row for this answer
+    evidence_row: Optional[EvidenceModel] = None
+    if answer_row:
+        evidence_row = (
+            db.query(EvidenceModel)
+            .filter(EvidenceModel.answer_id == answer_row.id)
+            .order_by(EvidenceModel.created_at.desc())
+            .first()
+        )
 
     if answer_row:
         signal_row = (
@@ -395,6 +400,9 @@ async def get_result(
         answer=answer_row.generated_text if answer_row else None,
         confidence_score=confidence_score,
         confidence_tier=confidence_tier,
+        content=evidence_row.content if evidence_row else None,
+        source_uri=evidence_row.source_uri if evidence_row else None,
+        relevance_score=evidence_row.relevance_score if evidence_row else None,
         signals=stored_signals,
         created_at=(
             query_row.created_at.isoformat() if query_row.created_at else None
