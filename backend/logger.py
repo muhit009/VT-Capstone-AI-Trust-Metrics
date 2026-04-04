@@ -240,14 +240,15 @@ class Logger:
             # log_query already failed — skip silently
             return None
         try:
-            evidence_row = Evidence(
-                answer_id = answer_row.id,
-                content=content,
-                source_uri=source_uri,
-                relevance_score=relevance_score
-            )
-            db.add(evidence_row)
-            db.flush()   # populate query_row.id without committing
+            for i, (content_value, source_uri_value, relevance_score_value) in enumerate(zip(content, source_uri, relevance_score)):
+                evidence_row = Evidence(
+                    answer_id = answer_row.id,
+                    content=content_value,
+                    source_uri=source_uri_value,
+                    relevance_score=relevance_score_value,
+                )
+                db.add(evidence_row)
+            db.flush()   # populate answer_row.id without committing
             logger.info(
                 "Logged evidence=%s content_length=%d source_uri_length=%d relevance_score_num=%d",
                 answer_row.id, len(content), len(source_uri), len(relevance_score),
