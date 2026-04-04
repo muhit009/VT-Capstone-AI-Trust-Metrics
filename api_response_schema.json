@@ -1,0 +1,806 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema",
+  "$id": "groundcheck-api-response-v1.0",
+  "title": "GroundCheck API Response Schema",
+  "description": "Defines the exact JSON structure of all GroundCheck API responses. Two top-level shapes exist: SuccessResponse (query answered) and ErrorResponse (request could not be fulfilled). Use the 'status' field to discriminate. \n\nOWNERSHIP NOTE: The 'confidence' object is owned by the Confidence Engine team (Xuhui & Muhit). Its field names and types are authoritative as defined in confidence_model.md v1.1 and ConfidenceResult.to_dict() in confidence/engine.py. The backend MUST pass this object through without renaming fields. Any frontend field mapping must happen client-side.",
+  "version": "1.0",
+
+  "oneOf": [
+    { "$ref": "#/$defs/SuccessResponse" },
+    { "$ref": "#/$defs/ErrorResponse" }
+  ],
+
+  "$defs": {
+
+    "SuccessResponse": {
+      "type": "object",
+      "title": "SuccessResponse",
+      "description": "Returned when the query was processed end-to-end: retrieval succeeded, LLM generated an answer, and confidence scoring completed (possibly in degraded mode).",
+      "required": ["status", "request_id", "timestamp", "query", "answer", "confidence", "citations", "metadata"],
+      "additionalProperties": false,
+      "properties": {
+
+        "status": {
+          "type": "string",
+          "enum": ["ok"],
+          "description": "Discriminator field. Always 'ok' for success responses."
+        },
+
+        "request_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Server-generated UUID for this request. Used for log correlation, audit trail, and support tickets.",
+          "example": "b3d2f1a0-9c4e-4f8b-a123-56789abcdef0"
+        },
+
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp of when the response was generated.",
+          "example": "2026-03-19T14:32:05.123Z"
+        },
+
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "The original query string submitted by the user, echoed back for frontend display and audit.",
+          "example": "What is the maximum torque specification for M10 bolts in structural applications?"
+        },
+
+        "answer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The full generated answer text from the LLM. May contain markdown formatting. Frontend should render as markdown.",
+          "example": "The maximum torque specification for M10 class 8.8 bolts in structural applications is 45 N·m..."
+        },
+
+        "confidence": {
+          "$ref": "#/$defs/ConfidenceResult",
+          "description": "Confidence scoring result from the Confidence Engine. This object is the direct output of ConfidenceResult.to_dict() in confidence/engine.py. Field names MUST NOT be changed by the backend or API layer."
+        },
+
+        "citations": {
+          "type": "array",
+          "description": "Ordered list of retrieved document chunks used to generate the answer. Ordered by retrieval rank (rank 1 = most relevant). Between 0 and TOP_K_CHUNKS (default 5) entries.",
+          "minItems": 0,
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/Citation" }
+        },
+
+        "metadata": {
+          "$ref": "#/$defs/ResponseMetadata"
+        }
+      }
+    },
+
+    "ErrorResponse": {
+      "type": "object",
+      "title": "ErrorResponse",
+      "description": "Returned when the request could not be fulfilled. Partial failures (e.g., confidence scoring degraded) are NOT errors — they produce a SuccessResponse with confidence.degraded=true.",
+      "required": ["status", "request_id", "timestamp", "error"],
+      "additionalProperties": false,
+      "properties": {
+
+        "status": {
+          "type": "string",
+          "enum": ["error"],
+          "description": "Discriminator field. Always 'error' for error responses."
+        },
+
+        "request_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Server-generated UUID for this request, even on failure. Used for log correlation."
+        },
+
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp when the error was generated."
+        },
+
+        "error": {
+          "$ref": "#/$defs/ApiError"
+        }
+      }
+    },
+
+    "ConfidenceResult": {
+      "type": "object",
+      "title": "ConfidenceResult",
+      "description": "AUTHORITATIVE CONTRACT — defined by confidence/engine.py ConfidenceResult.to_dict(). This is the direct output of the Confidence Engine. The backend passes this object through without modification. Field names must match exactly.",
+      "required": ["score", "tier", "signals", "degraded", "warning"],
+      "additionalProperties": false,
+      "properties": {
+
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Final confidence score. Integer in [0, 100]. Computed as: round(100 * (0.7 * grounding_norm + 0.3 * gen_conf_norm)). In degraded mode, computed from the available signal only.",
+          "examples": [88, 59, 21, 70, 40, 0]
+        },
+
+        "tier": {
+          "type": "string",
+          "enum": ["HIGH", "MEDIUM", "LOW"],
+          "description": "Categorical reliability label mapped from score. HIGH: score>=70 (green, safe to use). MEDIUM: 40<=score<70 (amber, verify key claims). LOW: score<40 (red, do not rely on)."
+        },
+
+        "signals": {
+          "$ref": "#/$defs/ConfidenceSignals"
+        },
+
+        "degraded": {
+          "type": "boolean",
+          "description": "True if one or both scoring signals were unavailable and the score was computed from a single signal or set to 0. The frontend MUST display a visible warning when degraded=true. A degraded HIGH score is less reliable than a normal HIGH score."
+        },
+
+        "warning": {
+          "type": ["string", "null"],
+          "description": "Human-readable warning message when degraded=true or a scoring anomaly occurred. Null when degraded=false and all signals computed normally. Frontend should surface this string directly.",
+          "examples": [
+            null,
+            "Grounding score unavailable. Using Generation Confidence only.",
+            "Generation confidence unavailable. Using Grounding Score only.",
+            "Both signals unavailable. Score set to 0."
+          ]
+        }
+      }
+    },
+
+    "ConfidenceSignals": {
+      "type": "object",
+      "title": "ConfidenceSignals",
+      "description": "Audit trail of raw signal values feeding into the final score. All fields from confidence/engine.py signals dict. Null values indicate the signal could not be computed (scorer raised an exception). Frontend should render these in a collapsible 'Score Breakdown' panel.",
+      "required": [
+        "grounding_score",
+        "grounding_num_claims",
+        "grounding_supported",
+        "gen_confidence_raw",
+        "gen_confidence_normalized",
+        "gen_confidence_level",
+        "grounding_contribution",
+        "gen_conf_contribution"
+      ],
+      "additionalProperties": false,
+      "properties": {
+
+        "grounding_score": {
+          "type": ["number", "null"],
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Signal 1 (Grounding Score): mean NLI entailment across all extracted claims against retrieved chunks. Range [0.0, 1.0]. Formula: (1/N) * sum_i(max_j(entailment(claim_i, chunk_j))). Null if grounding scorer failed.",
+          "examples": [0.89, 0.60, 0.0, null]
+        },
+
+        "grounding_num_claims": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Number of atomic claims extracted from the answer by NLTK sentence splitter. 0 if the answer was too short or a refusal. Null if grounding scorer failed.",
+          "examples": [3, 5, 0, null]
+        },
+
+        "grounding_supported": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Number of claims with max_entailment > 0.5 (the 'supported' threshold). Informational only — the actual grounding_score uses the continuous entailment values, not this binary count. Null if grounding scorer failed.",
+          "examples": [3, 3, 0, null]
+        },
+
+        "gen_confidence_raw": {
+          "type": ["number", "null"],
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Signal 2 (Generation Confidence): mean token probability before normalization. Formula: (1/T) * sum_t(exp(logprob_t)) over non-special tokens. Null if generation confidence scorer failed.",
+          "examples": [0.816, 0.638, 0.719, null]
+        },
+
+        "gen_confidence_normalized": {
+          "type": ["number", "null"],
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Signal 2 after normalization to [0,1]. Formula: clip((raw - 0.3) / 0.6, 0.0, 1.0). This normalized value is what feeds into the fusion formula. Null if generation confidence scorer failed.",
+          "examples": [0.860, 0.563, 0.699, null]
+        },
+
+        "gen_confidence_level": {
+          "type": ["string", "null"],
+          "enum": ["HIGHLY_CONFIDENT", "MODERATE", "UNCERTAIN", null],
+          "description": "Categorical label for the raw generation confidence. HIGHLY_CONFIDENT: raw_mean > 0.8. MODERATE: 0.5 < raw_mean <= 0.8. UNCERTAIN: raw_mean <= 0.5. Informational — does not directly affect fusion. Null if generation confidence scorer failed."
+        },
+
+        "grounding_contribution": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 70.0,
+          "description": "Points contributed by the grounding signal to the final score. Formula: grounding_score_norm * 70. In degraded mode (gen confidence missing), this equals the full score. Always present — never null (0.0 when signal is missing or grounding=0).",
+          "examples": [62.3, 42.0, 0.0]
+        },
+
+        "gen_conf_contribution": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 30.0,
+          "description": "Points contributed by the generation confidence signal to the final score. Formula: gen_confidence_norm * 30. In degraded mode (grounding missing), this equals the full score. Always present — never null (0.0 when signal is missing).",
+          "examples": [25.8, 16.9, 21.0]
+        }
+      }
+    },
+
+    "Citation": {
+      "type": "object",
+      "title": "Citation",
+      "description": "A retrieved document chunk used as evidence for the answer. Corresponds to one entry in the chunks list passed to the confidence engine. The claim_support array cross-references which claims this chunk best supports.",
+      "required": ["rank", "chunk_index", "text", "source", "retrieval_score"],
+      "additionalProperties": false,
+      "properties": {
+
+        "rank": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "description": "1-based rank by retrieval relevance score. Rank 1 is the most relevant chunk returned by the retriever."
+        },
+
+        "chunk_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "0-based index matching the position in the chunks[] array passed to confidence_engine.score(). Used to cross-reference with claim_support.best_supporting_chunk_idx."
+        },
+
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The raw text of the retrieved document chunk. Frontend should display this in the citation panel so users can verify claims against source content."
+        },
+
+        "source": {
+          "$ref": "#/$defs/SourceDocument"
+        },
+
+        "retrieval_score": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Cosine similarity score between the query embedding and this chunk embedding, as returned by the retriever (ChromaDB). Higher = more relevant to the query."
+        },
+
+        "claim_support": {
+          "type": "array",
+          "description": "Claims from the answer for which this chunk is the best supporting evidence (best_supporting_chunk_idx matches this chunk's chunk_index). Empty if no claims were best-supported by this chunk. Populated from grounding_scorer ClaimDetail objects.",
+          "items": { "$ref": "#/$defs/ClaimSupport" },
+          "default": []
+        }
+      }
+    },
+
+    "SourceDocument": {
+      "type": "object",
+      "title": "SourceDocument",
+      "description": "Metadata about the source document a chunk was retrieved from. Used by the frontend for citation display and for users to locate the original document.",
+      "required": ["document_name"],
+      "additionalProperties": false,
+      "properties": {
+
+        "document_id": {
+          "type": ["string", "null"],
+          "description": "Internal identifier for the document in the knowledge base (ChromaDB document ID or KB record ID). Null if not available from the retriever.",
+          "example": "doc_fastener_specs_rev_c"
+        },
+
+        "document_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable file or document name. Displayed in the citation panel as the source reference.",
+          "examples": ["Fastener_Specifications.pdf", "Safety_Manual_Rev_B.docx", "Engineering_Standards_2025.pdf"]
+        },
+
+        "section": {
+          "type": ["string", "null"],
+          "description": "Section, chapter, or heading within the document if available from the KB metadata. Null if not provided.",
+          "examples": ["Table 4", "Section 6.2", "Appendix C", null]
+        },
+
+        "page_number": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Page number within the document if available from the KB metadata. Null if not provided.",
+          "examples": [12, 47, null]
+        },
+
+        "revision": {
+          "type": ["string", "null"],
+          "description": "Document revision or version string if available from KB metadata. Important for Boeing context — users must verify they are reading the current revision.",
+          "examples": ["Rev C", "2025-01", null]
+        },
+
+        "last_updated": {
+          "type": ["string", "null"],
+          "format": "date",
+          "description": "Date the document was last updated in the knowledge base, if available. Null if not tracked.",
+          "examples": ["2025-11-30", null]
+        }
+      }
+    },
+
+    "ClaimSupport": {
+      "type": "object",
+      "title": "ClaimSupport",
+      "description": "NLI-based claim verification result. Indicates that this citation chunk is the best-supporting evidence for the given claim. Derived from ClaimDetail objects in grounding_scorer.py.",
+      "required": ["claim_text", "entailment_score", "supported"],
+      "additionalProperties": false,
+      "properties": {
+
+        "claim_text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The atomic claim extracted from the answer text by the grounding scorer. Corresponds to ClaimDetail.claim."
+        },
+
+        "entailment_score": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "DeBERTa NLI entailment probability for this (claim, chunk) pair. This is the max entailment across all retrieved chunks — the score that made this chunk the best match for this claim. Corresponds to ClaimDetail.max_entailment."
+        },
+
+        "supported": {
+          "type": "boolean",
+          "description": "True if entailment_score > 0.5 (the SUPPORTED_THRESHOLD in grounding_scorer.py). Informational binary label. Corresponds to ClaimDetail.supported."
+        }
+      }
+    },
+
+    "ResponseMetadata": {
+      "type": "object",
+      "title": "ResponseMetadata",
+      "description": "Operational metadata about how the response was generated. Useful for performance monitoring, debugging, and audit.",
+      "required": ["latency_ms", "model", "retriever"],
+      "additionalProperties": false,
+      "properties": {
+
+        "latency_ms": {
+          "$ref": "#/$defs/LatencyBreakdown"
+        },
+
+        "model": {
+          "$ref": "#/$defs/ModelInfo"
+        },
+
+        "retriever": {
+          "$ref": "#/$defs/RetrieverInfo"
+        }
+      }
+    },
+
+    "LatencyBreakdown": {
+      "type": "object",
+      "title": "LatencyBreakdown",
+      "description": "Per-stage latency in milliseconds. Allows frontend and monitoring to identify which stage is slow.",
+      "required": ["total"],
+      "additionalProperties": false,
+      "properties": {
+
+        "total": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total wall-clock time for the request from receipt to response, in milliseconds."
+        },
+
+        "retrieval": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Time for ChromaDB vector search to return chunks, in milliseconds. Null if not measured."
+        },
+
+        "llm_generation": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Time for the LLM (Mistral via vLLM/Ollama) to generate the answer and logprobs, in milliseconds. Null if not measured."
+        },
+
+        "grounding_scoring": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Time for DeBERTa NLI to compute grounding score across all (claim, chunk) pairs, in milliseconds. Null if not measured or scorer failed."
+        },
+
+        "gen_confidence_scoring": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Time for generation confidence computation (logprob processing + normalization), in milliseconds. Usually <1ms. Null if not measured."
+        },
+
+        "fusion": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Time for the weighted fusion computation, in milliseconds. Usually <1ms. Null if not measured."
+        }
+      }
+    },
+
+    "ModelInfo": {
+      "type": "object",
+      "title": "ModelInfo",
+      "description": "Information about the LLM and NLI models used to generate this response.",
+      "required": ["llm_model", "nli_model"],
+      "additionalProperties": false,
+      "properties": {
+
+        "llm_model": {
+          "type": "string",
+          "description": "Model identifier for the LLM used to generate the answer. Matches VLLM_MODEL or OLLAMA_MODEL from config.py.",
+          "examples": ["mistral-small-24b", "mistral:7b-instruct"]
+        },
+
+        "llm_backend": {
+          "type": ["string", "null"],
+          "enum": ["vllm", "ollama", null],
+          "description": "Which LLM serving backend was used. 'vllm' = HPC cluster (production), 'ollama' = local dev."
+        },
+
+        "nli_model": {
+          "type": "string",
+          "description": "Model identifier for the NLI model used for grounding scoring. Matches NLI_MODEL from config.py.",
+          "examples": ["cross-encoder/nli-deberta-v3-small"]
+        },
+
+        "confidence_model_version": {
+          "type": ["string", "null"],
+          "description": "Version of the confidence scoring model specification applied (from confidence_model.md). Enables audit traceability.",
+          "examples": ["1.1", null]
+        }
+      }
+    },
+
+    "RetrieverInfo": {
+      "type": "object",
+      "title": "RetrieverInfo",
+      "description": "Information about the retrieval configuration used for this query.",
+      "required": ["chunks_retrieved"],
+      "additionalProperties": false,
+      "properties": {
+
+        "chunks_retrieved": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "description": "Number of chunks actually returned by the retriever for this query. May be less than top_k if the KB has fewer matching documents."
+        },
+
+        "top_k": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "The maximum number of chunks requested from the retriever (TOP_K_CHUNKS from config.py, default 5). Null if not tracked."
+        },
+
+        "collection": {
+          "type": ["string", "null"],
+          "description": "ChromaDB collection name queried. Null if not available or not using ChromaDB.",
+          "examples": ["boeing_engineering_kb", null]
+        }
+      }
+    },
+
+    "ApiError": {
+      "type": "object",
+      "title": "ApiError",
+      "description": "Structured error information. NOTE: Confidence scoring failures (degraded mode) do NOT produce ErrorResponse — they produce SuccessResponse with confidence.degraded=true. ErrorResponse is reserved for failures that prevent any answer from being generated.",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+
+        "code": {
+          "type": "string",
+          "enum": [
+            "INVALID_REQUEST",
+            "QUERY_TOO_LONG",
+            "LLM_UNAVAILABLE",
+            "LLM_TIMEOUT",
+            "RETRIEVAL_FAILURE",
+            "RETRIEVAL_TIMEOUT",
+            "INTERNAL_ERROR"
+          ],
+          "description": "Machine-readable error code. Frontend should handle each code with an appropriate UI state. See error_code_guide below for details."
+        },
+
+        "message": {
+          "type": "string",
+          "description": "Human-readable error message suitable for display. Should not expose internal stack traces or system paths."
+        },
+
+        "details": {
+          "type": ["object", "null"],
+          "description": "Optional structured details for debugging. Not intended for display to end users. Null in production; may be populated in dev/staging.",
+          "additionalProperties": true
+        },
+
+        "retry_after_ms": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "For transient errors (LLM_UNAVAILABLE, LLM_TIMEOUT, RETRIEVAL_TIMEOUT): suggested wait time in milliseconds before retrying. Null if retry is not applicable or timing is unknown."
+        }
+      }
+    }
+  },
+
+  "error_code_guide": {
+    "_note": "This block is documentation only — not part of the JSON Schema validation. It describes each error code and the recommended frontend behavior.",
+    "INVALID_REQUEST": {
+      "cause": "Query is empty, malformed, or fails server-side validation.",
+      "http_status": 400,
+      "frontend_action": "Show inline validation error. Do not retry."
+    },
+    "QUERY_TOO_LONG": {
+      "cause": "Query exceeds the 2000 character limit.",
+      "http_status": 400,
+      "frontend_action": "Show character limit warning. Do not retry."
+    },
+    "LLM_UNAVAILABLE": {
+      "cause": "vLLM (HPC) or Ollama (dev) server is not reachable or returned a non-200 response.",
+      "http_status": 503,
+      "frontend_action": "Show 'AI model temporarily unavailable' message. Offer retry after retry_after_ms."
+    },
+    "LLM_TIMEOUT": {
+      "cause": "LLM generation exceeded VLLM_TIMEOUT (120s) or OLLAMA_TIMEOUT (120s) from config.py.",
+      "http_status": 504,
+      "frontend_action": "Show 'Request timed out' message. Offer retry."
+    },
+    "RETRIEVAL_FAILURE": {
+      "cause": "ChromaDB query failed (connection error, corrupted index, or invalid collection).",
+      "http_status": 502,
+      "frontend_action": "Show 'Document search unavailable' message. Log for ops team."
+    },
+    "RETRIEVAL_TIMEOUT": {
+      "cause": "ChromaDB query exceeded timeout.",
+      "http_status": 504,
+      "frontend_action": "Show 'Document search timed out' message. Offer retry."
+    },
+    "INTERNAL_ERROR": {
+      "cause": "Unexpected server-side exception not covered by the above codes.",
+      "http_status": 500,
+      "frontend_action": "Show generic error with request_id so the user can report it."
+    }
+  },
+
+  "examples": {
+    "high_confidence_success": {
+      "status": "ok",
+      "request_id": "b3d2f1a0-9c4e-4f8b-a123-56789abcdef0",
+      "timestamp": "2026-03-19T14:32:05.123Z",
+      "query": "What is the maximum torque specification for M10 bolts in structural applications?",
+      "answer": "The maximum torque specification for M10 class 8.8 bolts in structural applications is 45 N·m. This applies to dry-thread conditions. For lubricated threads, apply a torque reduction factor of 0.75.",
+      "confidence": {
+        "score": 88,
+        "tier": "HIGH",
+        "signals": {
+          "grounding_score": 0.89,
+          "grounding_num_claims": 3,
+          "grounding_supported": 3,
+          "gen_confidence_raw": 0.816,
+          "gen_confidence_normalized": 0.860,
+          "gen_confidence_level": "HIGHLY_CONFIDENT",
+          "grounding_contribution": 62.3,
+          "gen_conf_contribution": 25.8
+        },
+        "degraded": false,
+        "warning": null
+      },
+      "citations": [
+        {
+          "rank": 1,
+          "chunk_index": 0,
+          "text": "Table 4: Fastener Specifications (class 8.8) — M10 bolt maximum torque: 45 N·m (dry). For lubricated thread conditions apply torque reduction factor K=0.75.",
+          "source": {
+            "document_id": "doc_fastener_specs_rev_c",
+            "document_name": "Fastener_Specifications.pdf",
+            "section": "Table 4",
+            "page_number": 12,
+            "revision": "Rev C",
+            "last_updated": "2025-11-30"
+          },
+          "retrieval_score": 0.94,
+          "claim_support": [
+            {
+              "claim_text": "The maximum torque specification for M10 class 8.8 bolts in structural applications is 45 N·m.",
+              "entailment_score": 0.956,
+              "supported": true
+            }
+          ]
+        },
+        {
+          "rank": 2,
+          "chunk_index": 3,
+          "text": "Thread lubrication affects effective clamping force. When lubricants are used, torque values from Table 4 must be adjusted using the K-factor specified in Section 6.2.",
+          "source": {
+            "document_id": "doc_fastener_specs_rev_c",
+            "document_name": "Fastener_Specifications.pdf",
+            "section": "Section 6.2",
+            "page_number": 18,
+            "revision": "Rev C",
+            "last_updated": "2025-11-30"
+          },
+          "retrieval_score": 0.87,
+          "claim_support": [
+            {
+              "claim_text": "For lubricated threads, apply a torque reduction factor of 0.75.",
+              "entailment_score": 0.891,
+              "supported": true
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "latency_ms": {
+          "total": 4820,
+          "retrieval": 210,
+          "llm_generation": 3850,
+          "grounding_scoring": 740,
+          "gen_confidence_scoring": 2,
+          "fusion": 1
+        },
+        "model": {
+          "llm_model": "mistral-small-24b",
+          "llm_backend": "vllm",
+          "nli_model": "cross-encoder/nli-deberta-v3-small",
+          "confidence_model_version": "1.1"
+        },
+        "retriever": {
+          "chunks_retrieved": 5,
+          "top_k": 5,
+          "collection": "boeing_engineering_kb"
+        }
+      }
+    },
+
+    "low_confidence_success": {
+      "status": "ok",
+      "request_id": "a1c3e5g7-0b2d-4f6h-8i9j-klmnopqrstuv",
+      "timestamp": "2026-03-19T14:35:11.456Z",
+      "query": "What are the overtime approval requirements for exempt employees?",
+      "answer": "Exempt employees are not entitled to overtime pay under the FLSA. Supervisors may approve additional compensation via Form HR-441 for hours exceeding 50 per week.",
+      "confidence": {
+        "score": 21,
+        "tier": "LOW",
+        "signals": {
+          "grounding_score": 0.0,
+          "grounding_num_claims": 4,
+          "grounding_supported": 0,
+          "gen_confidence_raw": 0.719,
+          "gen_confidence_normalized": 0.699,
+          "gen_confidence_level": "MODERATE",
+          "grounding_contribution": 0.0,
+          "gen_conf_contribution": 21.0
+        },
+        "degraded": false,
+        "warning": null
+      },
+      "citations": [
+        {
+          "rank": 1,
+          "chunk_index": 0,
+          "text": "Systems Engineering Process: requirements analysis, functional decomposition, design synthesis, verification planning.",
+          "source": {
+            "document_id": "doc_se_handbook",
+            "document_name": "Systems_Engineering_Handbook.pdf",
+            "section": "Chapter 1",
+            "page_number": 4,
+            "revision": null,
+            "last_updated": null
+          },
+          "retrieval_score": 0.31,
+          "claim_support": []
+        }
+      ],
+      "metadata": {
+        "latency_ms": {
+          "total": 4105,
+          "retrieval": 195,
+          "llm_generation": 3620,
+          "grounding_scoring": 275,
+          "gen_confidence_scoring": 1,
+          "fusion": 1
+        },
+        "model": {
+          "llm_model": "mistral-small-24b",
+          "llm_backend": "vllm",
+          "nli_model": "cross-encoder/nli-deberta-v3-small",
+          "confidence_model_version": "1.1"
+        },
+        "retriever": {
+          "chunks_retrieved": 5,
+          "top_k": 5,
+          "collection": "boeing_engineering_kb"
+        }
+      }
+    },
+
+    "degraded_mode_success": {
+      "status": "ok",
+      "request_id": "d4e5f6a7-1b2c-3d4e-5f6g-7h8i9j0klmno",
+      "timestamp": "2026-03-19T15:01:44.789Z",
+      "query": "What are the torque specs for M12 bolts?",
+      "answer": "M12 class 8.8 bolts have a maximum torque of 78 N·m in dry conditions.",
+      "confidence": {
+        "score": 75,
+        "tier": "HIGH",
+        "signals": {
+          "grounding_score": null,
+          "grounding_num_claims": null,
+          "grounding_supported": null,
+          "gen_confidence_raw": 0.719,
+          "gen_confidence_normalized": 0.699,
+          "gen_confidence_level": "MODERATE",
+          "grounding_contribution": 0.0,
+          "gen_conf_contribution": 75.0
+        },
+        "degraded": true,
+        "warning": "Grounding score unavailable. Using Generation Confidence only."
+      },
+      "citations": [],
+      "metadata": {
+        "latency_ms": {
+          "total": 3920,
+          "retrieval": 188,
+          "llm_generation": 3700,
+          "grounding_scoring": null,
+          "gen_confidence_scoring": 1,
+          "fusion": 1
+        },
+        "model": {
+          "llm_model": "mistral-small-24b",
+          "llm_backend": "vllm",
+          "nli_model": "cross-encoder/nli-deberta-v3-small",
+          "confidence_model_version": "1.1"
+        },
+        "retriever": {
+          "chunks_retrieved": 3,
+          "top_k": 5,
+          "collection": "boeing_engineering_kb"
+        }
+      }
+    },
+
+    "error_llm_unavailable": {
+      "status": "error",
+      "request_id": "f7g8h9i0-2j3k-4l5m-6n7o-8p9q0r1s2t3u",
+      "timestamp": "2026-03-19T16:45:00.000Z",
+      "error": {
+        "code": "LLM_UNAVAILABLE",
+        "message": "The AI model is temporarily unavailable. Please try again in a moment.",
+        "details": null,
+        "retry_after_ms": 5000
+      }
+    }
+  },
+
+  "cross_team_contract": {
+    "_note": "This block is documentation only. It records the field-level contract between the Confidence Engine team and the API/Frontend teams.",
+    "confidence_engine_owns": [
+      "confidence.score",
+      "confidence.tier",
+      "confidence.signals.*",
+      "confidence.degraded",
+      "confidence.warning"
+    ],
+    "backend_api_owns": [
+      "status",
+      "request_id",
+      "timestamp",
+      "query",
+      "answer",
+      "citations[].rank",
+      "citations[].chunk_index",
+      "citations[].text",
+      "citations[].source.*",
+      "citations[].retrieval_score",
+      "metadata.*"
+    ],
+    "shared_ownership": [
+      "citations[].claim_support — populated by backend using ClaimDetail objects from grounding_scorer; structure defined by Confidence Engine team"
+    ],
+    "immutable_fields": "The confidence.signals field names (grounding_score, grounding_num_claims, grounding_supported, gen_confidence_raw, gen_confidence_normalized, gen_confidence_level, grounding_contribution, gen_conf_contribution) MUST NOT be renamed. They are the direct output of ConfidenceResult.to_dict() in confidence/engine.py. Any change requires a confidence_model.md version bump and re-approval by both teams."
+  }
+}
