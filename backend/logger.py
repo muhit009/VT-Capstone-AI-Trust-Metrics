@@ -14,7 +14,7 @@ Design principles:
 
 Public API
 ----------
-    from query_logger import query_logger
+    from logger import query_logger
 
     # Log incoming query → returns Query ORM row (or None on failure)
     query_row = query_logger.log_query(
@@ -35,6 +35,15 @@ Public API
         signals={...},                # raw signal dict from ConfidenceResult
         metadata={...},               # optional extra metadata
     )
+
+    #After logging the answer + confidence signals, log the evidences
+    evidence_row = query_logger.log_evidence(
+        db=db,
+        answer_row=answer_row,
+        content="text of evidence",
+        source_uri="title of source",
+        relevance_score=90.4
+    )
 """
 from __future__ import annotations
 
@@ -50,7 +59,7 @@ from models.db_models import Query, Answer, ConfidenceSignal, Evidence
 logger = logging.getLogger(__name__)
 
 
-class QueryLogger:
+class Logger:
     """
     Handles all audit logging to the PostgreSQL database.
 
@@ -332,4 +341,4 @@ class QueryLogger:
 # ---------------------------------------------------------------------------
 # Module-level singleton
 # ---------------------------------------------------------------------------
-query_logger = QueryLogger()
+query_logger = Logger()

@@ -6,7 +6,7 @@ Implements the two primary endpoints from ticket #60:
     POST /api/v1/query            — Submit a RAG query, get a GroundCheckResponse
     GET  /api/v1/results/{query_id} — Retrieve a stored result by query_id
 
-All query submissions are logged to the database via query_logger.py.
+All query submissions are logged to the database via logger.py.
 Results are retrievable immediately from the in-process store keyed by
 query_id (same request cycle) or from the database for historical lookups.
 
@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models.db_models import Query as QueryModel, Answer as AnswerModel, ConfidenceSignal, Evidence as EvidenceModel
-from query_logger import query_logger
+from backend.logger import query_logger
 from rag_orchestrator import rag_orchestrator
 from services.model_service import model_executor
 from response_models import (
