@@ -238,14 +238,21 @@ async def submit_query(
         )
 
         # --- Step 6: Log evidence ----------------------------------------
+        citation_text = []
+        citation_source = []
+        citation_score = []
         for citation in rag_response.citations:
-            query_logger.log_evidence(
-                db=db,
-                answer_row=answer_row,
-                content=citation.text,
-                source_uri=citation.source,
-                relevance_score=citation.similarity_score,
-            )
+            citation_text.append(citation.text)
+            citation_source.append(citation.source)
+            citation_score.append(citation.similarity_score)
+        
+        query_logger.log_evidence(
+            db=db,
+            answer_row=answer_row,
+            content=citation_text,
+            source_uri=citation_source,
+            relevance_score=citation_score,
+        )
 
         # --- Step 7: Build and return GroundCheckResponse -------------------
         return ResponseBuilder.from_rag_run(

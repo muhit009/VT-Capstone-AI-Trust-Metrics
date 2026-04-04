@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from query_logger import QueryLogger, query_logger
+from backend.logger import QueryLogger, query_logger
 from models.db_models import Query, Answer, ConfidenceSignal
 
 

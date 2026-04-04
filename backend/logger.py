@@ -50,7 +50,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy.orm import Session
 
@@ -216,9 +216,9 @@ class Logger:
         self,
         db: Session,
         answer_row: Optional[Answer],
-        content: str,
-        source_uri: str,
-        relevance_score: float,
+        content: List[str],
+        source_uri: List[str],
+        relevance_score: List[float],
     ) -> Optional[Evidence]:
         """
         Insert an Evidence row into the database.
@@ -249,8 +249,17 @@ class Logger:
             db.add(evidence_row)
             db.flush()   # populate query_row.id without committing
             logger.info(
-                "Logged evidence=%s content_length=%d source_uri=%s relevance_score=%f",
-                answer_row.id, len(content), source_uri, relevance_score,
+                "Logged evidence=%s content_length=%d source_uri_length=%d relevance_score_num=%d",
+                answer_row.id, len(content), len(source_uri), len(relevance_score),
+            )
+            logger.info(
+                "Logged evidence content as: {}".format(' '.join(map(str, content)))
+            )
+            logger.info(
+                "Logged evidence source_uri as: {}".format(' '.join(map(str, source_uri)))
+            )
+            logger.info(
+                "Logged evidence relevance score as: {}".format(' '.join(map(str, relevance_score)))
             )
             return evidence_row
         except Exception as exp:
@@ -273,9 +282,9 @@ class Logger:
         generated_text: str,
         confidence_score: int,
         confidence_tier: str,
-        content: str,
-        source_uri: str,
-        relevance_score: float,
+        content: List[str],
+        source_uri: List[str],
+        relevance_score: List[float],
         signals: Optional[dict] = None,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
