@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models.db_models import Query as QueryModel, Answer as AnswerModel, ConfidenceSignal
+from models.db_models import Query as QueryModel, Answer as AnswerModel, ConfidenceSignal, Evidence as EvidenceModel
 from query_logger import query_logger
 from rag_orchestrator import rag_orchestrator
 from services.model_service import model_executor
@@ -130,6 +130,9 @@ class StoredResult(BaseModel):
     answer:      Optional[str]
     confidence_score: Optional[int]       # 0–100
     confidence_tier:  Optional[str]       # "HIGH" | "MEDIUM" | "LOW"
+    content:     Optional[str]
+    source_uri:  Optional[str]
+    relevance_score: Optional[float]
     signals:          Optional[StoredSignals]
     created_at:  Optional[str]            # ISO 8601 UTC
 
@@ -220,7 +223,7 @@ async def submit_query(
         processing_time_ms = int((time.monotonic() - t_start) * 1000)
 
         # --- Step 5: Log answer + signals ------------------------------------
-        query_logger.log_answer(
+        answer_row = query_logger.log_answer(
             db=db,
             query_row=query_row,
             generated_text=rag_response.answer or "",
@@ -234,7 +237,17 @@ async def submit_query(
             },
         )
 
-        # --- Step 6: Build and return GroundCheckResponse -------------------
+        # --- Step 6: Log evidence ----------------------------------------
+        for citation in rag_response.citations:
+            query_logger.log_evidence(
+                db=db,
+                answer_row=answer_row,
+                content=citation.text,
+                source_uri=citation.source,
+                relevance_score=citation.similarity_score,
+            )
+
+        # --- Step 7: Build and return GroundCheckResponse -------------------
         return ResponseBuilder.from_rag_run(
             query=payload.query,
             answer=rag_response.answer,
@@ -338,6 +351,11 @@ async def get_result(
     confidence_score = None
     confidence_tier  = None
     stored_signals   = None
+
+    # Look up Evidence if Answer exists
+    evidence_row: Optional[EvidenceModel] = (
+
+    )
 
     if answer_row:
         signal_row = (

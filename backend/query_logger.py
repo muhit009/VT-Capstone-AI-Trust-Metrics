@@ -45,7 +45,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from models.db_models import Query, Answer, ConfidenceSignal
+from models.db_models import Query, Answer, ConfidenceSignal, Evidence
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +200,59 @@ class QueryLogger:
             return None
 
     # ------------------------------------------------------------------
+    # Retrieved Evidence + Citations logging
+    # ------------------------------------------------------------------
+
+    def log_evidence(
+        self,
+        db: Session,
+        answer_row: Optional[Answer],
+        content: str,
+        source_uri: str,
+        relevance_score: float,
+    ) -> Optional[Evidence]:
+        """
+        Insert an Evidence row into the database.
+
+        Parameters
+        ----------
+        db               : Active SQLAlchemy session.
+        answer_row        : The Answer ORM instance returned by log_answer().
+                           If None (log_query failed), this method is a no-op.
+        content          : The information used to determine an answer.
+        source_uri       : The source that was used to research the query.
+        relevance_score  : Score that shows how relevant the information is for the query.
+
+        Returns
+        -------
+        Answer ORM instance on success, None on any failure.
+        """
+        if answer_row is None:
+            # log_query already failed — skip silently
+            return None
+        try:
+            evidence_row = Evidence(
+                answer_id = answer_row.id,
+                content=content,
+                source_uri=source_uri,
+                relevance_score=relevance_score
+            )
+            db.add(evidence_row)
+            db.flush()   # populate query_row.id without committing
+            logger.info(
+                "Logged evidence=%s content_length=%d source_uri=%s relevance_score=%f",
+                answer_row.id, len(content), source_uri, relevance_score,
+            )
+            return evidence_row
+        except Exception as exp:
+            logger.error("Failed to log evidence: %s", exp, exc_info=True)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            return None
+
+    # ------------------------------------------------------------------
     # Full pipeline logging — convenience wrapper
     # ------------------------------------------------------------------
 
@@ -211,6 +264,9 @@ class QueryLogger:
         generated_text: str,
         confidence_score: int,
         confidence_tier: str,
+        content: str,
+        source_uri: str,
+        relevance_score: float,
         signals: Optional[dict] = None,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
@@ -241,7 +297,14 @@ class QueryLogger:
             signals=signals,
             metadata=metadata,
         )
-        return query_row, answer_row
+        evidence_row = self.log_evidence(
+            db=db,
+            query_row=query_row,
+            content=content,
+            source_uri=source_uri,
+            relevance_score=relevance_score,
+        )
+        return query_row, answer_row, evidence_row
 
     # ------------------------------------------------------------------
     # Internal helpers
