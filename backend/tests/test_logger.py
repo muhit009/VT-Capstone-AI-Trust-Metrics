@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from backend.logger import QueryLogger, query_logger
+from logger import QueryLogger, query_logger
 from models.db_models import Query, Answer, ConfidenceSignal
 
 
@@ -326,4 +326,106 @@ class TestBuildSignalExplanation:
         explanation = QueryLogger._build_signal_explanation(50, "MEDIUM", {})
         assert isinstance(explanation, str)
         assert len(explanation) > 0
+        
+
+# ---------------------------------------------------------------------------
+# log_evidence
+# ---------------------------------------------------------------------------
+
+def _make_citation(text="chunk text", source="doc.pdf", score=0.91):
+    from unittest.mock import MagicMock
+    c = MagicMock()
+    c.text = text
+    c.source = source
+    c.similarity_score = score
+    return c
+
+
+class TestLogEvidence:
+    def test_successful_insert_one_row_per_citation(self):
+        db = _make_db()
+        query_row = _make_query_row()
+        ql = QueryLogger()
+
+        added_objects = []
+        db.add.side_effect = added_objects.append
+
+        answer_row = MagicMock()
+        answer_row.id = uuid.uuid4()
+
+        ql.log_evidence(
+            db=db,
+            answer_row=answer_row,
+            content=["text A", "text B", "text C"],
+            source_uri=["a.pdf", "b.pdf", "c.pdf"],
+            relevance_score=[0.90, 0.80, 0.70],
+        )
+
+        from models.db_models import Evidence
+        evidence_rows = [o for o in added_objects if isinstance(o, Evidence)]
+        assert len(evidence_rows) == 3
+
+    def test_source_uri_stored_correctly(self):
+        db = _make_db()
+        added_objects = []
+        db.add.side_effect = added_objects.append
+
+        answer_row = MagicMock()
+        answer_row.id = uuid.uuid4()
+
+        ql = QueryLogger()
+        ql.log_evidence(
+            db=db,
+            answer_row=answer_row,
+            content=["text"],
+            source_uri=["nasa_handbook.pdf"],
+            relevance_score=[0.88],
+        )
+
+        from models.db_models import Evidence
+        evidence_rows = [o for o in added_objects if isinstance(o, Evidence)]
+        assert evidence_rows[0].source_uri == "nasa_handbook.pdf"
+
+    def test_none_answer_row_is_noop(self):
+        db = _make_db()
+        ql = QueryLogger()
+        result = ql.log_evidence(
+            db=db,
+            answer_row=None,
+            content=["text"],
+            source_uri=["doc.pdf"],
+            relevance_score=[0.85],
+        )
+        assert result is None
+        db.add.assert_not_called()
+
+    def test_db_failure_returns_none_does_not_raise(self):
+        db = _make_db()
+        db.flush.side_effect = Exception("disk full")
+        answer_row = MagicMock()
+        answer_row.id = uuid.uuid4()
+        ql = QueryLogger()
+        result = ql.log_evidence(
+            db=db,
+            answer_row=answer_row,
+            content=["text"],
+            source_uri=["doc.pdf"],
+            relevance_score=[0.85],
+        )
+        assert result is None
+        db.rollback.assert_called_once()
+
+    def test_empty_lists_logs_nothing(self):
+        db = _make_db()
+        answer_row = MagicMock()
+        answer_row.id = uuid.uuid4()
+        ql = QueryLogger()
+        ql.log_evidence(
+            db=db,
+            answer_row=answer_row,
+            content=[],
+            source_uri=[],
+            relevance_score=[],
+        )
+        db.add.assert_not_called()
         

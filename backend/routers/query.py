@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -119,6 +119,12 @@ class StoredSignals(BaseModel):
     explanation: Optional[str] = None
 
 
+class StoredEvidence(BaseModel):
+    content:         Optional[str]   = None
+    source_uri:      Optional[str]   = None
+    relevance_score: Optional[float] = None
+
+
 class StoredResult(BaseModel):
     """
     Lightweight result model returned by GET /api/v1/results/{query_id}.
@@ -130,10 +136,8 @@ class StoredResult(BaseModel):
     answer:      Optional[str]
     confidence_score: Optional[int]       # 0–100
     confidence_tier:  Optional[str]       # "HIGH" | "MEDIUM" | "LOW"
-    content:     Optional[str]
-    source_uri:  Optional[str]
-    relevance_score: Optional[float]
-    signals:          Optional[StoredSignals]
+    evidence:    List[StoredEvidence] = []  # one entry per retrieved citation
+    signals:     Optional[StoredSignals]
     created_at:  Optional[str]            # ISO 8601 UTC
 
 
@@ -319,7 +323,8 @@ async def get_result(
     POST /api/v1/query). Looks up the most recent Answer and its
     ConfidenceSignal for the given query.
     """
-    # Look up Query row by the query_id stored in params JSONB
+    # Look up Query row by the query_id stored in params JSONB.
+    # query_id was written into params["query_id"] by submit_query() at POST time.
     query_row: Optional[QueryModel] = db.query(QueryModel).filter(
         QueryModel.params["query_id"].astext == query_id
     ).first()
@@ -330,29 +335,21 @@ async def get_result(
             detail=f"No query found with id={query_id!r}.",
         )
 
-    # Look up most recent Answer for this query
+    # Look up most recent Answer for this query using query_row.id (the DB UUID),
+    # NOT parsed_uuid — query_row.id is already the correct UUID primary key.
     answer_row: Optional[AnswerModel] = (
         db.query(AnswerModel)
-        .filter(AnswerModel.query_id == parsed_uuid)
+        .filter(AnswerModel.query_id == query_row.id)
         .order_by(AnswerModel.created_at.desc())
         .first()
     )
 
-    # Look up ConfidenceSignal if answer exists
+    # Look up ConfidenceSignal and all Evidence rows if answer exists
     signal_row: Optional[ConfidenceSignal] = None
     confidence_score = None
     confidence_tier  = None
     stored_signals   = None
-
-    # Look up most recent Evidence row for this answer
-    evidence_row: Optional[EvidenceModel] = None
-    if answer_row:
-        evidence_row = (
-            db.query(EvidenceModel)
-            .filter(EvidenceModel.answer_id == answer_row.id)
-            .order_by(EvidenceModel.created_at.desc())
-            .first()
-        )
+    evidence_list: List[StoredEvidence] = []
 
     if answer_row:
         signal_row = (
@@ -365,7 +362,6 @@ async def get_result(
             raw_score = signal_row.score  # stored as float [0,1]
             confidence_score = round(raw_score * 100) if raw_score is not None else None
             if confidence_score is not None:
-                # Re-derive tier using the same thresholds as the engine
                 from confidence.tier_categorizer import categorize_tier
                 confidence_tier = categorize_tier(confidence_score).tier
             stored_signals = StoredSignals(
@@ -373,10 +369,25 @@ async def get_result(
                 method=signal_row.method,
                 explanation=signal_row.explanation,
             )
-        # Try to read tier from metadata_json if signal row is absent
         elif answer_row.metadata_json:
             confidence_score = answer_row.metadata_json.get("confidence_score")
             confidence_tier  = answer_row.metadata_json.get("confidence_tier")
+
+        # Fetch ALL evidence rows for this answer (one per retrieved citation)
+        evidence_rows = (
+            db.query(EvidenceModel)
+            .filter(EvidenceModel.answer_id == answer_row.id)
+            .order_by(EvidenceModel.created_at.asc())
+            .all()
+        )
+        evidence_list = [
+            StoredEvidence(
+                content=e.content,
+                source_uri=e.source_uri,
+                relevance_score=e.relevance_score,
+            )
+            for e in evidence_rows
+        ]
 
     return StoredResult(
         query_id=query_id,
@@ -385,9 +396,7 @@ async def get_result(
         answer=answer_row.generated_text if answer_row else None,
         confidence_score=confidence_score,
         confidence_tier=confidence_tier,
-        content=evidence_row.content if evidence_row else None,
-        source_uri=evidence_row.source_uri if evidence_row else None,
-        relevance_score=evidence_row.relevance_score if evidence_row else None,
+        evidence=evidence_list,
         signals=stored_signals,
         created_at=(
             query_row.created_at.isoformat() if query_row.created_at else None

@@ -59,7 +59,7 @@ from models.db_models import Query, Answer, ConfidenceSignal, Evidence
 logger = logging.getLogger(__name__)
 
 
-class Logger:
+class QueryLogger:
     """
     Handles all audit logging to the PostgreSQL database.
 
@@ -351,4 +351,4 @@ class Logger:
 # ---------------------------------------------------------------------------
 # Module-level singleton
 # ---------------------------------------------------------------------------
-query_logger = Logger()
+query_logger = QueryLogger()
