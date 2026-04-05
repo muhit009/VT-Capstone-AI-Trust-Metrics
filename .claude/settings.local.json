@@ -6,7 +6,9 @@
       "Bash(ls .venv*)",
       "Bash(ls /Users/ethando/Desktop/VT-Capstone-AI-Trust-Metrics/*.md /Users/ethando/Desktop/VT-Capstone-AI-Trust-Metrics/*.json)",
       "Bash(ls:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(npm test:*)",
+      "Bash(npx vitest:*)"
     ]
   }
 }
