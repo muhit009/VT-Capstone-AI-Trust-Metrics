@@ -177,19 +177,20 @@ async def submit_query(
     """
     t_start = time.monotonic()
 
+    # Generate the query_id first so it can be stored in the DB alongside the query.
+    query_id = ResponseBuilder.make_query_id()
+
     # --- Log incoming query -------------------------------------------------
+    params = dict(payload.model_params or {})
+    params["query_id"] = query_id          # store so GET /results can look it up
     query_row = query_logger.log_query(
         db=db,
         prompt=payload.query,
         model_name=getattr(model_executor, "model_id", "unknown"),
         session_id=payload.session_id,
         user_id=payload.user_id,
-        params=payload.model_params,
+        params=params,
     )
-
-    # Use the DB-assigned query row ID as the query_id if available,
-    # otherwise let ResponseBuilder generate one from the timestamp.
-    query_id = f"q_{str(query_row.id).replace('-', '')}" if query_row else None
 
     try:
         # --- Steps 2 & 3: Retrieve + Generate -------------------------------
@@ -318,25 +319,9 @@ async def get_result(
     POST /api/v1/query). Looks up the most recent Answer and its
     ConfidenceSignal for the given query.
     """
-    # Parse the query_id back to a UUID
-    # Accepts either raw UUID string or the q_<hex> format from ResponseBuilder
-    try:
-        raw_id = query_id
-        # Strip the "q_" prefix formatting if present (q_<24 hex chars>)
-        if raw_id.startswith("q_") and len(raw_id) == 34:
-            hex_part = raw_id[2:]  # 32 hex chars
-            # Re-insert hyphens to form a valid UUID (8-4-4-4-12)
-            raw_id = f"{hex_part[:8]}-{hex_part[8:12]}-{hex_part[12:16]}-{hex_part[16:20]}-{hex_part[20:]}"
-        parsed_uuid = UUID(raw_id)
-    except (ValueError, IndexError):
-        raise HTTPException(
-            status_code=http_status.HTTP_400_BAD_REQUEST,
-            detail=f"Malformed query_id: {query_id!r}. Expected a UUID or q_<id> format.",
-        )
-
-    # Look up Query row
+    # Look up Query row by the query_id stored in params JSONB
     query_row: Optional[QueryModel] = db.query(QueryModel).filter(
-        QueryModel.id == parsed_uuid
+        QueryModel.params["query_id"].astext == query_id
     ).first()
 
     if query_row is None:
