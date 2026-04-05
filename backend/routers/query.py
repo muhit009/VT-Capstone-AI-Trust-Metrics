@@ -189,7 +189,7 @@ async def submit_query(
 
     # Use the DB-assigned query row ID as the query_id if available,
     # otherwise let ResponseBuilder generate one from the timestamp.
-    query_id = f"q_{str(query_row.id)[:24].replace('-', '')}" if query_row else None
+    query_id = f"q_{str(query_row.id).replace('-', '')}" if query_row else None
 
     try:
         # --- Steps 2 & 3: Retrieve + Generate -------------------------------
@@ -323,8 +323,8 @@ async def get_result(
     try:
         raw_id = query_id
         # Strip the "q_" prefix formatting if present (q_<24 hex chars>)
-        if raw_id.startswith("q_") and len(raw_id) == 26:
-            hex_part = raw_id[2:]
+        if raw_id.startswith("q_") and len(raw_id) == 34:
+            hex_part = raw_id[2:]  # 32 hex chars
             # Re-insert hyphens to form a valid UUID (8-4-4-4-12)
             raw_id = f"{hex_part[:8]}-{hex_part[8:12]}-{hex_part[12:16]}-{hex_part[16:20]}-{hex_part[20:]}"
         parsed_uuid = UUID(raw_id)
