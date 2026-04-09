@@ -196,6 +196,10 @@ async def submit_query(
         params=params,
     )
 
+    # Commit query row immediately to ensure query_id is available.
+    if query_row:
+        db.commit()  # commit to generate query_row.id for foreign key references
+
     try:
         # --- Steps 2 & 3: Retrieve + Generate -------------------------------
         rag_response = rag_orchestrator.run(
