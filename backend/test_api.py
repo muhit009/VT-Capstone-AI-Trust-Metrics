@@ -11,7 +11,7 @@ user_id = None
 
 # Define the payload
 payload = {
-    "query": "Hello, what is the capital of France?",
+    "query": "What is system engineering according to NASA?",
     "session_id": "abc123",
     "model_params": {},
     "user_id": user_id

@@ -248,7 +248,7 @@ class QueryLogger:
                     relevance_score=relevance_score_value,
                 )
                 db.add(evidence_row)
-            db.flush()   # populate answer_row.id without committing
+            db.commit()   # populate answer_row.id without committing
             logger.info(
                 "Logged evidence=%s content_length=%d source_uri_length=%d relevance_score_num=%d",
                 answer_row.id, len(content), len(source_uri), len(relevance_score),
