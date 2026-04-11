@@ -1,15 +1,18 @@
-// Re-export the shared API client and all domain types so existing import paths
-// (../../services/api) continue to work without modification.
 export { apiClient } from '../api/client';
 export type {
   Metric,
   ConfidenceSignals,
-  FusionWeights,
   ConfidenceData,
+  ClaimSupport,
+  CitationSource,
   CitationModel,
+  LatencyBreakdown,
+  ModelInfo,
+  RetrieverInfo,
   ResponseMetadata,
   ErrorInfo,
   GroundCheckResponse,
+  GroundCheckErrorResponse,
   RAGInferenceRequest,
   FeedbackRating,
   FeedbackRequest,
@@ -24,8 +27,6 @@ import type {
   FeedbackRequest,
   FeedbackResponse,
 } from '../api/types';
-
-// ── Service functions ─────────────────────────────────────────────────────────
 
 export const metricsService = {
   getAll: () => apiClient.get<Metric[]>('/metrics'),

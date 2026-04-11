@@ -1,149 +1,210 @@
-// src/components/dashboard/ChatInterface.jsx
-import { Copy, Download, Save, Flag as FlagIcon, Paperclip, Send, ChevronDown } from 'lucide-react';
+import {
+  Loader2,
+  Send,
+  Copy,
+  AlertTriangle,
+  CheckCircle2,
+  AlertCircle,
+  RotateCcw,
+} from 'lucide-react';
 
-export default function ChatInterface() {
+const tierStyles = {
+  HIGH: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  MEDIUM: 'bg-amber-50 text-amber-700 border-amber-200',
+  LOW: 'bg-rose-50 text-rose-700 border-rose-200',
+};
+
+const tierIcons = {
+  HIGH: CheckCircle2,
+  MEDIUM: AlertCircle,
+  LOW: AlertTriangle,
+};
+
+function formatLatency(latency) {
+  if (typeof latency !== 'number') return '—';
+  return `${latency} ms`;
+}
+
+function SourcePill({ citation }) {
   return (
-    <div className="flex-1 min-w-0 flex flex-col bg-white">
-      {/* Messages */}
-      <div className="flex-1 overflow-auto px-8 py-6">
-        <div className="max-w-4xl mx-auto space-y-6">
-          {/* User */}
-          <div className="flex justify-end">
-            <div className="max-w-2xl bg-gray-100 rounded-2xl px-5 py-3">
-              <p className="text-gray-900">
-                I’m a new Boeing engineer. Can you explain the difference between the 737 MAX and the 787 in
-                terms of typical use-case and major design goals? Also, what should I be careful about when
-                comparing fuel efficiency?
-              </p>
-            </div>
-          </div>
+    <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700">
+      <span className="font-medium">[{citation.rank}]</span>
+      <span className="max-w-[220px] truncate">{citation.source.document_name}</span>
+      {citation.source.page_number ? (
+        <span className="text-gray-500">p.{citation.source.page_number}</span>
+      ) : null}
+    </div>
+  );
+}
 
-          {/* Assistant */}
-          <div className="flex justify-start">
-            <div className="max-w-3xl w-full">
-              <div className="bg-white border border-gray-200 rounded-2xl px-6 py-5 shadow-sm">
-                <div className="space-y-4 text-gray-900 leading-relaxed">
-                  <p>
-                    Welcome aboard. At a high level, the <strong>737 MAX</strong> is a single-aisle aircraft
-                    optimized for short-to-medium range, high-frequency routes, while the{' '}
-                    <strong>787 Dreamliner</strong> is a widebody designed for long-haul efficiency and passenger
-                    comfort on longer segments.
-                  </p>
+function AssistantMessage({ message, onCopy }) {
+  const response = message.response;
+  const tier = response?.confidence?.tier ?? 'MEDIUM';
+  const TierIcon = tierIcons[tier] ?? AlertCircle;
 
-                  <p>
-                    <strong>Typical use-case:</strong> The 737 MAX is commonly used for high-cycle operations
-                    (many takeoffs and landings per day) with quicker turnaround. The 787 is designed for longer
-                    stage lengths, where aerodynamic efficiency and weight savings provide bigger benefits over
-                    time{' '}
-                    <span className="inline-flex items-center justify-center w-6 h-5 text-xs font-medium text-primary-700 bg-primary-50 rounded">
-                      [1]
-                    </span>
-                    .
-                  </p>
-
-                  <p>
-                    <strong>Design goals:</strong> The 737 MAX emphasizes incremental efficiency improvements
-                    within a single-aisle platform, while the 787 emphasizes a more integrated long-range
-                    efficiency story (structure, systems, and overall performance) and operational flexibility{' '}
-                    <span className="inline-flex items-center justify-center w-6 h-5 text-xs font-medium text-primary-700 bg-primary-50 rounded">
-                      [2]
-                    </span>
-                    .
-                  </p>
-
-                  <p>
-                    <strong>Fuel efficiency caveat:</strong> Be careful comparing “fuel burn” without normalizing
-                    by mission profile and payload (e.g., stage length, reserves, passenger/cargo mix). Aircraft
-                    can look more or less efficient depending on the scenario and assumptions{' '}
-                    <span className="inline-flex items-center justify-center w-6 h-5 text-xs font-medium text-primary-700 bg-primary-50 rounded">
-                      [3]
-                    </span>
-                    .
-                  </p>
-
-                  <p>
-                    If you tell me the route length and payload assumptions you’re using, I can help structure a
-                    fair comparison and what metrics to use (per seat-mile, per ton-mile, etc.).
-                  </p>
+  return (
+    <div className="flex justify-start">
+      <div className="w-full max-w-4xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Assistant answer</p>
+            {response ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div
+                  className={[
+                    'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium',
+                    tierStyles[tier],
+                  ].join(' ')}
+                >
+                  <TierIcon className="h-3.5 w-3.5" />
+                  {response.confidence.score}/100 · {tier}
                 </div>
 
-                {/* Confidence strip */}
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200 text-sm shadow-sm">
-                    <span className="font-bold text-amber-900">74</span>
-                    <span className="w-1 h-1 rounded-full bg-amber-400" />
-                    <span className="font-medium text-amber-800">Medium Confidence</span>
-                    <span className="hidden sm:block w-px h-3 bg-amber-200 mx-1" />
-                    <span className="hidden sm:block text-amber-700 text-xs">
-                      Depends on mission assumptions
-                    </span>
+                <div className="text-xs text-gray-500">
+                  Latency: {formatLatency(response.metadata?.latency_ms?.total)}
+                </div>
+
+                {response.confidence.degraded ? (
+                  <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                    Degraded mode
                   </div>
-                  <button className="h-8 px-3 text-xs rounded-lg text-primary-600 hover:bg-primary-50">
-                    View details
-                  </button>
-                </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        </div>
 
-                {/* Actions */}
-                <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center gap-2">
-                  {[
-                    { Icon: Copy, label: 'Copy' },
-                    { Icon: Download, label: 'Export' },
-                    { Icon: Save, label: 'Save' },
-                    { Icon: FlagIcon, label: 'Flag' },
-                  ].map(({ Icon, label }) => (
-                    <button
-                      key={label}
-                      className="h-8 px-3 text-xs rounded-lg border border-gray-200 hover:bg-gray-50 inline-flex items-center gap-2"
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                      {label}
-                    </button>
-                  ))}
-                </div>
+        <div className="mt-4 whitespace-pre-wrap text-[15px] leading-7 text-gray-800">
+          {message.content}
+        </div>
+
+        {response ? (
+          <>
+            {response.confidence.warning ? (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {response.confidence.warning}
+              </div>
+            ) : null}
+
+            <div className="mt-5">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Evidence used
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {response.citations?.length ? (
+                  response.citations.map((citation) => (
+                    <SourcePill
+                      key={`${response.request_id}-${citation.rank}`}
+                      citation={citation}
+                    />
+                  ))
+                ) : (
+                  <div className="text-sm text-gray-500">No citations returned.</div>
+                )}
               </div>
             </div>
-          </div>
+
+            <div className="mt-5 flex flex-wrap gap-2 border-t border-gray-200 pt-4">
+              <button
+                type="button"
+                onClick={() => onCopy(message.content)}
+                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <Copy className="h-3.5 w-3.5" /> Copy answer
+              </button>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export default function ChatInterface({
+  messages,
+  draft,
+  setDraft,
+  isSubmitting,
+  onSubmit,
+  onReset,
+}) {
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      onSubmit();
+    }
+  };
+
+  const handleNewChat = () => {
+    onReset();
+  };
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-white">
+      <div className="flex-1 overflow-auto px-6 py-6 lg:px-8">
+        <div className="mx-auto flex max-w-4xl flex-col gap-6">
+          {messages.map((message) =>
+            message.role === 'user' ? (
+              <div key={message.id} className="flex justify-end">
+                <div className="max-w-2xl rounded-2xl bg-slate-900 px-5 py-3 text-sm leading-6 text-white shadow-sm">
+                  {message.content}
+                </div>
+              </div>
+            ) : (
+              <AssistantMessage
+                key={message.id}
+                message={message}
+                onCopy={(text) => navigator.clipboard.writeText(text)}
+              />
+            ),
+          )}
+
+          {isSubmitting ? (
+            <div className="flex justify-start">
+              <div className="inline-flex items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-600 shadow-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generating grounded answer...
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 
-      {/* Input */}
-      <div className="sticky bottom-0 border-t border-gray-200 bg-white/95 backdrop-blur-sm px-8 py-6 pb-8 shadow-[0_-8px_30px_rgba(0,0,0,0.04)] z-10">
-        <div className="max-w-4xl mx-auto space-y-4">
-          {/* Quick actions */}
-          <div className="flex flex-wrap gap-2">
-            {['Assess risk', 'Explain confidence', 'Show evidence', 'Summarize'].map((action) => (
-              <button
-                key={action}
-                className="text-xs px-3 py-1.5 rounded-full border border-gray-200 bg-white hover:bg-gray-50"
-              >
-                {action}
-              </button>
-            ))}
-          </div>
+      <div className="border-t border-gray-200 bg-white px-6 py-5 lg:px-8">
+        <div className="mx-auto max-w-4xl">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-3 shadow-sm">
+            <textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={3}
+              placeholder="Ask about aircraft families, tradeoffs, performance caveats, or where to verify a claim..."
+              className="w-full resize-none border-0 bg-transparent px-2 py-2 text-sm text-gray-900 outline-none placeholder:text-gray-400"
+            />
 
-          <div className="flex items-end gap-3">
-            <button className="h-10 w-10 rounded-lg border border-gray-200 hover:bg-gray-50 inline-flex items-center justify-center">
-              <Paperclip className="w-4 h-4 text-gray-600" />
-            </button>
+            <div className="mt-3 flex items-center justify-between border-t border-gray-200 pt-3">
+              <div className="text-xs text-gray-500">Enter to send · Shift+Enter for newline</div>
 
-            <div className="flex-1">
-              <textarea
-                rows={2}
-                placeholder="Ask a question…"
-                className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <div className="mt-2 flex items-center justify-between">
-                <button className="text-xs text-gray-600 hover:text-gray-900 inline-flex items-center gap-1">
-                  Model: Default <ChevronDown className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleNewChat}
+                  disabled={isSubmitting || !messages.length}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> New chat
                 </button>
-                <span className="text-xs text-gray-400">Shift + Enter for newline</span>
+
+                <button
+                  type="button"
+                  onClick={onSubmit}
+                  disabled={isSubmitting || !draft.trim()}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Send className="h-4 w-4" /> Ask
+                </button>
               </div>
             </div>
-
-            <button className="h-10 px-4 rounded-lg bg-primary-600 hover:bg-primary-700 text-white inline-flex items-center gap-2">
-              <Send className="w-4 h-4" />
-              Send
-            </button>
           </div>
         </div>
       </div>
