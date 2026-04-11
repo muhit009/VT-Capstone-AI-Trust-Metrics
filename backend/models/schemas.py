@@ -11,7 +11,7 @@ class InferenceRequest(BaseModel):
     no_repeat_ngram_size) have been removed — neither Ollama nor vLLM
     supports them and they were previously silently ignored.
     """
-    prompt: str = Field(..., example="Explain quantum computing in one sentence.")
+    prompt: str = Field(..., json_schema_extra={"example": "Explain quantum computing in one sentence."})
     max_new_tokens: Optional[int] = 128
     temperature: Optional[float] = 0.0     # default 0 — deterministic, matches client defaults
     top_p: Optional[float] = 0.9

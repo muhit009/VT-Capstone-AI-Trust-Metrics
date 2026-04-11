@@ -398,7 +398,7 @@ class ResponseBuilder:
         if confidence_result.degraded and confidence_result.warning:
             # Map degraded signal warnings to appropriate error codes
             warning = confidence_result.warning
-            if "Grounding" in warning:
+            if warning.startswith("Grounding"):
                 code = ErrorCode.NLI_FAILURE
             else:
                 code = ErrorCode.GENERATION_CONFIDENCE_UNAVAILABLE

@@ -68,7 +68,7 @@ class QueryRequest(BaseModel):
         min_length=1,
         max_length=4096,
         description="Natural language question to submit to the RAG pipeline.",
-        example="What is the maximum thrust of the RS-25 engine?",
+        json_schema_extra={"example": "What is the maximum thrust of the RS-25 engine?"},
     )
     top_k: int = Field(
         default=5,
@@ -327,6 +327,13 @@ async def get_result(
     POST /api/v1/query). Looks up the most recent Answer and its
     ConfidenceSignal for the given query.
     """
+    # Added regex validation to ensure query_id format is correct before DB lookup.
+    import re
+    if not re.match(r"^(q_\d{8}_\d{6}_[a-z0-9]{6}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", query_id, re.IGNORECASE):
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail="Malformed query_id format."
+        )
     # Look up Query row by the query_id stored in params JSONB.
     # query_id was written into params["query_id"] by submit_query() at POST time.
     query_row: Optional[QueryModel] = db.query(QueryModel).filter(

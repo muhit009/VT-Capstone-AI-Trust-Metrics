@@ -177,7 +177,7 @@ class TestRetrievalPipelineRetrieve:
         pipeline.retrieve("test", top_k=7)
         pipeline._store.query.assert_called_once()
         _, kwargs = pipeline._store.query.call_args
-        assert kwargs.get("top_k", pipeline._store.query.call_args[0][1]) == 7
+        assert kwargs.get("top_k") == 7
 
     def test_similarity_score_converted_from_distance(self):
         hits = [make_hit(distance=0.10)]

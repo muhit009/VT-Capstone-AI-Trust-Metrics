@@ -248,6 +248,7 @@ class QueryLogger:
                     relevance_score=relevance_score_value,
                 )
                 db.add(evidence_row)
+            db.flush()  # populate evidence_row.id for all rows
             db.commit()   # populate answer_row.id without committing
             logger.info(
                 "Logged evidence=%s content_length=%d source_uri_length=%d relevance_score_num=%d",
@@ -283,9 +284,9 @@ class QueryLogger:
         generated_text: str,
         confidence_score: int,
         confidence_tier: str,
-        content: List[str],
-        source_uri: List[str],
-        relevance_score: List[float],
+        content: Optional[List[str]] = None,
+        source_uri: Optional[List[str]] = None,
+        relevance_score: Optional[List[float]] = None,
         signals: Optional[dict] = None,
         session_id: Optional[str] = None,
         user_id: Optional[str] = None,
@@ -316,14 +317,15 @@ class QueryLogger:
             signals=signals,
             metadata=metadata,
         )
-        evidence_row = self.log_evidence(
-            db=db,
-            answer_row=answer_row,
-            content=content,
-            source_uri=source_uri,
-            relevance_score=relevance_score,
-        )
-        return query_row, answer_row, evidence_row
+        if content and source_uri and relevance_score:
+            evidence_row = self.log_evidence(
+                db=db,
+                answer_row=answer_row,
+                content=content,
+                source_uri=source_uri,
+                relevance_score=relevance_score,
+            )
+        return query_row, answer_row
 
     # ------------------------------------------------------------------
     # Internal helpers

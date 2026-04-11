@@ -112,8 +112,8 @@ class TestRAGPipelineIntegration:
     Mocks external services; verifies component orchestration and response shape.
     """
 
-    @patch("retrieval.embedding_service")
-    @patch("retrieval.vector_store")
+    @patch("retrieval.retrieval_pipeline._embedding_svc")
+    @patch("retrieval.retrieval_pipeline._store")
     def test_end_to_end_success_flow(
         self,
         mock_vector_store,
@@ -199,8 +199,8 @@ class TestRAGPipelineIntegration:
         assert response.error.code == ErrorCode.GENERATION_CONFIDENCE_UNAVAILABLE
         assert response.answer is not None   # answer still produced in degraded mode
 
-    @patch("retrieval.embedding_service")
-    @patch("retrieval.vector_store")
+    @patch("retrieval.retrieval_pipeline._embedding_svc")
+    @patch("retrieval.retrieval_pipeline._store")
     def test_no_relevant_documents_error(
         self,
         mock_vector_store,
