@@ -204,6 +204,62 @@ paths:
                     example: deleted
         '404':
           description: Document not found in vector store
+  
+  /v1/feedback/{query_id}:
+    post:
+      operationId: submitFeedback
+      summary: Submit user feedback and decision for a query result
+      description: |
+        Logs a user decision (accept/review/reject) and optional feedback
+        (thumbs up/down + comment) for the answer identified by query_id.
+        The decision is linked to the most recent Answer row for the given query.
+      parameters:
+        - name: query_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^q_\d{8}_\d{6}_[a-z0-9]{6}$'
+          description: Query identifier returned from /v1/rag/query
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+            examples:
+              thumbs_up:
+                summary: Accept with positive feedback
+                value:
+                  status: "accepted"
+                  feedback_rating: 1
+                  feedback_comment: "Answer was accurate and helpful."
+              needs_review:
+                summary: Flag for review
+                value:
+                  status: "review"
+                  rationale: "Answer seems partially incorrect."
+              rejected:
+                summary: Reject with explanation
+                value:
+                  status: "rejected"
+                  rationale: "Answer does not match the source material."
+                  feedback_rating: -1
+      responses:
+        '201':
+          description: Feedback logged successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackResponse'
+        '400':
+          description: Invalid query_id format
+        '404':
+          description: Query or answer not found
+        '422':
+          description: Validation error
+        '500':
+          description: Failed to log feedback
 
 components:
   schemas:
@@ -426,6 +482,49 @@ components:
         schema_version:
           type: string
           default: "1.0.0"
+    
+    FeedbackRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [accepted, review, rejected]
+          description: Decision action taken by the user.
+        rationale:
+          type: [string, "null"]
+          maxLength: 2048
+          description: Optional explanation for the decision.
+        feedback_rating:
+          type: [integer, "null"]
+          enum: [1, -1]
+          description: Thumbs up (1) or thumbs down (-1).
+        feedback_comment:
+          type: [string, "null"]
+          maxLength: 2048
+          description: Optional user feedback comment.
+        user_id:
+          type: [string, "null"]
+          description: UUID of the authenticated user.
+
+    FeedbackResponse:
+      type: object
+      required: [query_id, decision_id, status]
+      properties:
+        query_id:
+          type: string
+        decision_id:
+          type: string
+          description: Unique identifier for the logged decision.
+        status:
+          type: string
+          enum: [accepted, review, rejected]
+        feedback_rating:
+          type: [integer, "null"]
+          enum: [1, -1]
+        created_at:
+          type: [string, "null"]
+          format: date-time
 
     ErrorInfo:
       type: object

@@ -99,6 +99,49 @@ integrators. They are not imported or executed by any Python code.
 
 ---
 
+## Feedback Endpoint
+
+The API supports user feedback and decision logging for each query result.
+
+### POST `/v1/feedback/{query_id}`
+
+Submit a decision and optional feedback for a previously generated answer.
+
+#### Path Parameters
+
+| Name | Type | Required | Description |
+|---|---|---|---|
+| `query_id` | string | ✓ | Query identifier returned from `/v1/rag/query` |
+
+#### Request Body
+
+```json
+{
+  "status": "accepted",
+  "rationale": "Answer matches the document.",
+  "feedback_rating": 1,
+  "feedback_comment": "Very helpful response.",
+  "user_id": "optional-uuid"
+} 
+```
+#### Response (201 Created)
+
+```json
+{
+  "query_id": "q_20260315_143210_abc123",
+  "decision_id": "uuid",
+  "status": "accepted",
+  "feedback_rating": 1,
+  "created_at": "2026-03-15T14:35:12Z"
+}
+```
+
+**Notes**
+- Call this after receiving a response from `/v1/rag/query`
+- `status` is required even without a rating
+
+---
+
 ## Viewing the API Docs
 
 With the backend server running locally:
