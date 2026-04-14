@@ -102,21 +102,19 @@ function ProgressRow({ label, value, helper }) {
 function buildExplanation(confidence, citations) {
   const supported = confidence?.signals?.grounding_supported ?? null;
   const totalClaims = confidence?.signals?.grounding_num_claims ?? null;
-  const grounding = formatPercent(confidence?.signals?.grounding_score);
-  const generation = formatPercent(confidence?.signals?.gen_confidence_normalized);
-  const tier = confidence?.tier ?? 'UNKNOWN';
-  const label = confidence?.signals?.gen_confidence_level ?? 'Unavailable';
-  const citationCount = citations?.length ?? 0;
+  const warnings = confidence?.warnings;
 
-  const summary = `Overall confidence is ${tier.toLowerCase()} because the system found ${citationCount} retrieved source${citationCount === 1 ? '' : 's'}, grounding scored ${grounding}, and generation confidence scored ${generation}.`;
+  // Use backend-provided explanation as summary when available
+  const summary = confidence?.explanation
+    || `Overall confidence is ${(confidence?.tier ?? 'UNKNOWN').toLowerCase()}.`;
 
   const bullets = [
     totalClaims != null && supported != null
       ? `${supported} of ${totalClaims} extracted claims were supported by the retrieved evidence.`
       : 'Claim-support data was not fully available for this response.',
-    `The language model self-confidence label was ${label}.`,
-    confidence?.warning
-      ? `Warning: ${confidence.warning}`
+    `The language model self-confidence label was ${confidence?.signals?.gen_confidence_level ?? 'Unavailable'}.`,
+    warnings?.length
+      ? `Warning: ${warnings.join('; ')}`
       : 'No extra warning was attached to this response.',
   ];
 
@@ -125,11 +123,13 @@ function buildExplanation(confidence, citations) {
 
 const previewResponse = {
   confidence: {
-    score: 74,
+    final_score: 74,
     tier: 'MEDIUM',
     degraded: false,
-    warning:
+    explanation: 'MEDIUM confidence (score=74). Grounding score: 0.68 (NLI document support). Generation confidence: 0.71 (mean token probability).',
+    warnings: [
       'This answer is useful, but fuel-efficiency comparisons depend heavily on mission assumptions and normalization variables.',
+    ],
     signals: {
       grounding_score: 0.68,
       grounding_num_claims: 5,
@@ -143,58 +143,43 @@ const previewResponse = {
   },
   citations: [
     {
-      rank: 1,
-      retrieval_score: 0.92,
-      text: 'Fuel burn comparisons should be normalized by stage length, reserves, payload, and seating assumptions before comparing aircraft families.',
-      source: {
-        document_name: 'Aircraft Performance Primer',
-        section: 'Section 2.1',
-        page_number: 12,
-        revision: 'Rev B',
-      },
+      citation_id: 'aircraft_perf__chunk_0',
+      document: 'Aircraft Performance Primer',
+      section: 'Section 2.1',
+      page: 12,
+      chunk_id: 'chunk_0',
+      similarity_score: 0.92,
+      entailment_score: null,
+      text_excerpt: 'Fuel burn comparisons should be normalized by stage length, reserves, payload, and seating assumptions before comparing aircraft families.',
     },
     {
-      rank: 2,
-      retrieval_score: 0.86,
-      text: 'Short-haul and long-haul fuel efficiency differ because climb and cruise proportions change significantly across mission lengths.',
-      source: {
-        document_name: 'Internal Engineering Notes',
-        section: 'Entry #204',
-        page_number: null,
-        revision: '2025.09',
-      },
+      citation_id: 'eng_notes__chunk_1',
+      document: 'Internal Engineering Notes',
+      section: 'Entry #204',
+      page: null,
+      chunk_id: 'chunk_1',
+      similarity_score: 0.86,
+      entailment_score: null,
+      text_excerpt: 'Short-haul and long-haul fuel efficiency differ because climb and cruise proportions change significantly across mission lengths.',
     },
   ],
   metadata: {
-    latency_ms: {
-      total: 842,
-      retrieval: 123,
-      llm_generation: 472,
-      grounding_scoring: 88,
-      gen_confidence_scoring: 79,
-      fusion: 80,
-    },
-    model: {
-      name: 'Grounded RAG Pipeline',
-      provider: 'Internal',
-      version: 'preview',
-      endpoint: '/v1/rag/query',
-    },
-    retriever: {
-      top_k: 5,
-      embedding_model: 'text-embedding-preview',
-      vector_store: 'pgvector',
-    },
+    model: 'Grounded RAG Pipeline',
+    nli_model: 'cross-encoder/nli-deberta-v3-small',
+    timestamp: new Date().toISOString(),
+    processing_time_ms: 842,
+    retrieved_chunks: 5,
+    schema_version: '1.0.0',
   },
-  request_id: 'preview-request',
-  timestamp: new Date().toISOString(),
+  query_id: 'preview-request',
+  status: 'success',
 };
 
 export default function RightPanel({ latestResponse }) {
   const data = latestResponse || previewResponse;
   const isPreview = !latestResponse;
 
-  const { confidence, citations, metadata, request_id, timestamp } = data;
+  const { confidence, citations, metadata, query_id } = data;
 
   const claimSupportRate = safeRate(
     confidence?.signals?.grounding_supported,
@@ -238,22 +223,22 @@ export default function RightPanel({ latestResponse }) {
             <StatCard
               icon={Gauge}
               label="Overall"
-              value={`${confidence.score}/100`}
+              value={`${confidence.final_score}/100`}
               helper="Final fused confidence score."
             />
             <StatCard
               icon={Clock3}
               label="Latency"
-              value={`${metadata?.latency_ms?.total ?? '—'} ms`}
+              value={`${metadata?.processing_time_ms ?? '—'} ms`}
               helper="End-to-end response time."
             />
           </div>
 
-          {confidence.warning ? (
+          {confidence.warnings?.length ? (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
               <div className="flex items-start gap-2">
                 <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>{confidence.warning}</span>
+                <span>{confidence.warnings.join('; ')}</span>
               </div>
             </div>
           ) : null}
@@ -326,29 +311,28 @@ export default function RightPanel({ latestResponse }) {
 
           <div className="space-y-3">
             {citations?.length ? (
-              citations.map((citation) => (
+              citations.map((citation, index) => (
                 <div
-                  key={`${request_id}-${citation.rank}`}
+                  key={`${query_id}-${citation.citation_id ?? index}`}
                   className="rounded-2xl border border-gray-200 p-4"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-medium text-gray-900">
-                        [{citation.rank}] {citation.source.document_name}
+                        [{index + 1}] {citation.document}
                       </div>
                       <div className="mt-1 text-xs text-gray-500">
-                        {citation.source.section || 'Section unavailable'}
-                        {citation.source.page_number ? ` · p.${citation.source.page_number}` : ''}
-                        {citation.source.revision ? ` · ${citation.source.revision}` : ''}
+                        {citation.section || 'Section unavailable'}
+                        {citation.page ? ` · p.${citation.page}` : ''}
                       </div>
                     </div>
 
                     <div className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                      {Math.round((citation.retrieval_score ?? 0) * 100)}%
+                      {Math.round((citation.similarity_score ?? 0) * 100)}%
                     </div>
                   </div>
 
-                  <p className="mt-3 text-sm leading-6 text-gray-700">{citation.text}</p>
+                  <p className="mt-3 text-sm leading-6 text-gray-700">{citation.text_excerpt}</p>
                 </div>
               ))
             ) : (
@@ -388,11 +372,11 @@ export default function RightPanel({ latestResponse }) {
               </div>
               <div className="mt-2 space-y-1">
                 <div>
-                  <span className="font-medium text-gray-900">Request ID:</span> {request_id}
+                  <span className="font-medium text-gray-900">Query ID:</span> {query_id}
                 </div>
                 <div>
                   <span className="font-medium text-gray-900">Timestamp:</span>{' '}
-                  {new Date(timestamp).toLocaleString()}
+                  {metadata?.timestamp ? new Date(metadata.timestamp).toLocaleString() : '—'}
                 </div>
               </div>
             </div>
@@ -403,57 +387,33 @@ export default function RightPanel({ latestResponse }) {
               </div>
               <div className="mt-2 space-y-1">
                 <div>
-                  <span className="font-medium text-gray-900">Name:</span>{' '}
-                  {metadata?.model?.name || 'Unknown model'}
+                  <span className="font-medium text-gray-900">LLM:</span>{' '}
+                  {metadata?.model || 'Unknown model'}
                 </div>
                 <div>
-                  <span className="font-medium text-gray-900">Provider:</span>{' '}
-                  {metadata?.model?.provider || 'Unknown provider'}
-                </div>
-                <div>
-                  <span className="font-medium text-gray-900">Version:</span>{' '}
-                  {metadata?.model?.version || '—'}
-                </div>
-                <div>
-                  <span className="font-medium text-gray-900">Endpoint:</span>{' '}
-                  {metadata?.model?.endpoint || '—'}
+                  <span className="font-medium text-gray-900">NLI model:</span>{' '}
+                  {metadata?.nli_model || '—'}
                 </div>
               </div>
             </div>
 
             <div className="rounded-2xl bg-gray-50 p-4">
               <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Retriever
+                Processing
               </div>
               <div className="mt-2 space-y-1">
                 <div>
-                  <span className="font-medium text-gray-900">top_k:</span>{' '}
-                  {metadata?.retriever?.top_k ?? '—'}
+                  <span className="font-medium text-gray-900">Total time:</span>{' '}
+                  {metadata?.processing_time_ms ?? '—'} ms
                 </div>
                 <div>
-                  <span className="font-medium text-gray-900">Embedding model:</span>{' '}
-                  {metadata?.retriever?.embedding_model || '—'}
+                  <span className="font-medium text-gray-900">Retrieved chunks:</span>{' '}
+                  {metadata?.retrieved_chunks ?? '—'}
                 </div>
                 <div>
-                  <span className="font-medium text-gray-900">Vector store:</span>{' '}
-                  {metadata?.retriever?.vector_store || '—'}
+                  <span className="font-medium text-gray-900">Schema version:</span>{' '}
+                  {metadata?.schema_version ?? '—'}
                 </div>
-              </div>
-            </div>
-
-            <div className="rounded-2xl bg-gray-50 p-4">
-              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-                Latency breakdown
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                <div>Retrieval: {metadata?.latency_ms?.retrieval ?? '—'} ms</div>
-                <div>Generation: {metadata?.latency_ms?.llm_generation ?? '—'} ms</div>
-                <div>Grounding scoring: {metadata?.latency_ms?.grounding_scoring ?? '—'} ms</div>
-                <div>
-                  Gen-conf scoring: {metadata?.latency_ms?.gen_confidence_scoring ?? '—'} ms
-                </div>
-                <div>Fusion: {metadata?.latency_ms?.fusion ?? '—'} ms</div>
-                <div>Total: {metadata?.latency_ms?.total ?? '—'} ms</div>
               </div>
             </div>
           </div>

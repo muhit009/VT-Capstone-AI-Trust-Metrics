@@ -151,7 +151,7 @@ class TestConfidenceDataFromResult:
     def test_maps_gen_confidence(self):
         result = make_confidence_result(gen_confidence=0.75)
         cd = ConfidenceData.from_confidence_result(result)
-        assert cd.signals.generation_confidence == 0.75
+        assert cd.signals.gen_confidence_normalized == 0.75
 
     def test_both_signals_default_weights(self):
         result = make_confidence_result(grounding_score=0.9, gen_confidence=0.7)
@@ -416,7 +416,7 @@ class TestGroundCheckValidation:
             confidence=ConfidenceData(
                 final_score=85,
                 tier=ConfidenceTier.HIGH,
-                signals=ConfidenceSignals(grounding_score=0.9, generation_confidence=0.7),
+                signals=ConfidenceSignals(grounding_score=0.9, gen_confidence_normalized=0.7),
                 weights=FusionWeights(grounding=0.7, generation=0.3),
                 explanation="Test.",
                 degraded=False,

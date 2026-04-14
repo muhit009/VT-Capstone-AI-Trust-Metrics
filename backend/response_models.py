@@ -88,16 +88,41 @@ class ConfidenceSignals(BaseModel):
     """
     Raw signal values before fusion.
     Maps directly from ConfidenceResult.signals (engine.py).
+    All 8 fields from confidence/engine.py:107-116.
     """
-    grounding_score:      Optional[UnitFloat] = Field(
+    grounding_score:          Optional[UnitFloat] = Field(
         default=None,
         description="NLI entailment-based document support score (0–1). "
                     "From GroundingScorer. Null if grounding scorer failed."
     )
-    generation_confidence: Optional[UnitFloat] = Field(
+    grounding_num_claims:     Optional[int] = Field(
+        default=None, ge=0,
+        description="Total number of claims extracted from the answer."
+    )
+    grounding_supported:      Optional[int] = Field(
+        default=None, ge=0,
+        description="Number of claims supported by retrieved evidence."
+    )
+    gen_confidence_raw:       Optional[float] = Field(
+        default=None,
+        description="Raw mean token probability before normalization."
+    )
+    gen_confidence_normalized: Optional[UnitFloat] = Field(
         default=None,
         description="Normalized mean token probability (0–1). "
                     "From GenerationConfidenceScorer. Null if logprobs unavailable."
+    )
+    gen_confidence_level:     Optional[str] = Field(
+        default=None,
+        description="Confidence level label: HIGHLY_CONFIDENT, MODERATE, or UNCERTAIN."
+    )
+    grounding_contribution:   Optional[float] = Field(
+        default=None,
+        description="Grounding signal's weighted contribution to the fused score."
+    )
+    gen_conf_contribution:    Optional[float] = Field(
+        default=None,
+        description="Generation confidence signal's weighted contribution to the fused score."
     )
 
 
@@ -150,7 +175,7 @@ class ConfidenceData(BaseModel):
         fusion_score: int,
         tier: str,
         grounding_score: Optional[float],
-        gen_confidence: Optional[float],
+        gen_confidence_normalized: Optional[float],
         degraded: bool,
         fusion_warning: Optional[str],
     ) -> str:
@@ -162,8 +187,8 @@ class ConfidenceData(BaseModel):
         else:
             parts.append("Grounding score: unavailable.")
 
-        if gen_confidence is not None:
-            parts.append(f"Generation confidence: {gen_confidence:.2f} (mean token probability).")
+        if gen_confidence_normalized is not None:
+            parts.append(f"Generation confidence: {gen_confidence_normalized:.2f} (mean token probability).")
         else:
             parts.append("Generation confidence: unavailable.")
 
@@ -209,7 +234,13 @@ class ConfidenceData(BaseModel):
             tier=tier,
             signals=ConfidenceSignals(
                 grounding_score=grounding,
-                generation_confidence=gen_conf,
+                grounding_num_claims=signals.get("grounding_num_claims"),
+                grounding_supported=signals.get("grounding_supported"),
+                gen_confidence_raw=signals.get("gen_confidence_raw"),
+                gen_confidence_normalized=gen_conf,
+                gen_confidence_level=signals.get("gen_confidence_level"),
+                grounding_contribution=signals.get("grounding_contribution"),
+                gen_conf_contribution=signals.get("gen_conf_contribution"),
             ),
             weights=weights,
             explanation=explanation,
@@ -447,7 +478,7 @@ class ResponseBuilder:
                 tier=ConfidenceTier.LOW,
                 signals=ConfidenceSignals(
                     grounding_score=None,
-                    generation_confidence=None,
+                    gen_confidence_normalized=None,
                 ),
                 explanation="No answer generated.",
                 degraded=True,

@@ -35,77 +35,10 @@ export default function AnalystChat() {
     setRequestError(null);
 
     try {
-      const response = {
-  request_id: `mock-${Date.now()}`,
-  timestamp: new Date().toISOString(),
-  answer:
-    'Fuel efficiency comparisons should be normalized by stage length, payload, reserves, and seating assumptions before comparing aircraft families.',
-  confidence: {
-    score: 78,
-    tier: 'MEDIUM',
-    degraded: false,
-    warning:
-      'This answer is useful, but comparisons depend strongly on mission assumptions.',
-    signals: {
-      grounding_score: 0.72,
-      grounding_num_claims: 5,
-      grounding_supported: 4,
-      gen_confidence_raw: 0.74,
-      gen_confidence_normalized: 0.74,
-      gen_confidence_level: 'MODERATE',
-      grounding_contribution: 0.6,
-      gen_conf_contribution: 0.4,
-    },
-  },
-  citations: [
-    {
-      rank: 1,
-      retrieval_score: 0.91,
-      text: 'Fuel burn comparisons should be normalized by stage length and payload before comparing aircraft.',
-      source: {
-        document_name: 'Aircraft Performance Primer',
-        section: '2.1',
-        page_number: 12,
-        revision: 'Rev B',
-      },
-    },
-    {
-      rank: 2,
-      retrieval_score: 0.84,
-      text: 'Mission length changes the share of climb versus cruise, which affects direct fuel-burn comparisons.',
-      source: {
-        document_name: 'Mission Efficiency Notes',
-        section: 'Performance comparison guidance',
-        page_number: 4,
-        revision: '2025.1',
-      },
-    },
-  ],
-  metadata: {
-    latency_ms: {
-      total: 812,
-      retrieval: 120,
-      llm_generation: 450,
-      grounding_scoring: 90,
-      gen_confidence_scoring: 80,
-      fusion: 72,
-    },
-    model: {
-      name: 'Grounded RAG Pipeline',
-      provider: 'Internal',
-      version: 'dev',
-      endpoint: '/v1/rag/query',
-    },
-    retriever: {
-      top_k: 5,
-      embedding_model: 'text-embedding-preview',
-      vector_store: 'pgvector',
-    },
-  },
-};
+      const response = await queryService.submit({ query: trimmed });
 
       const assistantMessage = {
-        id: `assistant-${response.request_id}`,
+        id: `assistant-${response.query_id}`,
         role: 'assistant',
         content: buildAssistantText(response),
         response,
