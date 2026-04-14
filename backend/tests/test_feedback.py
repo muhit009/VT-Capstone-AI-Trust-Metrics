@@ -29,7 +29,7 @@ from fastapi.testclient import TestClient
 
 from logger import QueryLogger
 from models.db_models import Answer, Decision
-
+from database import get_db
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -228,37 +228,43 @@ class TestFeedbackEndpoint:
         assert resp.status_code == 422
 
     def test_404_when_query_not_found(self, client):
-        with patch("routers.query.get_db") as mock_get_db:
-            db = MagicMock()
-            db.query.return_value.filter.return_value.first.return_value = None
-            mock_get_db.return_value = iter([db])
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        
+        # Override dependency with a lambda returning the exact mock instance
+        client.app.dependency_overrides[get_db] = lambda: db
+        try:
             resp = client.post(
                 f"/api/v1/feedback/{VALID_QUERY_ID}",
                 json={"status": "accepted"},
             )
+        finally:
+            client.app.dependency_overrides.clear()
+            
         assert resp.status_code == 404
 
     @patch("routers.query.query_logger")
-    @patch("routers.query.get_db")
-    def test_404_when_answer_not_found(self, mock_get_db, mock_logger, client):
+    def test_404_when_answer_not_found(self, mock_logger, client):
         db = MagicMock()
         query_row = MagicMock()
         query_row.id = uuid.uuid4()
-        # First query() call returns query_row, second (for answer) returns None
-        db.query.return_value.filter.return_value.first.side_effect = [
-            query_row, None
-        ]
+        
+        db.query.return_value.filter.return_value.first.return_value = query_row
         db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
-        mock_get_db.return_value = iter([db])
-        resp = client.post(
-            f"/api/v1/feedback/{VALID_QUERY_ID}",
-            json={"status": "accepted"},
-        )
+        
+        client.app.dependency_overrides[get_db] = lambda: db
+        try:
+            resp = client.post(
+                f"/api/v1/feedback/{VALID_QUERY_ID}",
+                json={"status": "accepted"},
+            )
+        finally:
+            client.app.dependency_overrides.clear()
+            
         assert resp.status_code == 404
 
     @patch("routers.query.query_logger")
-    @patch("routers.query.get_db")
-    def test_201_accepted_decision(self, mock_get_db, mock_logger, client):
+    def test_201_accepted_decision(self, mock_logger, client):
         db = MagicMock()
         query_row = MagicMock()
         query_row.id = uuid.uuid4()
@@ -274,12 +280,16 @@ class TestFeedbackEndpoint:
         decision_row.feedback_rating = 1
         decision_row.created_at = None
         mock_logger.log_decision.return_value = decision_row
-        mock_get_db.return_value = iter([db])
+        
+        client.app.dependency_overrides[get_db] = lambda: db
+        try:
+            resp = client.post(
+                f"/api/v1/feedback/{VALID_QUERY_ID}",
+                json={"status": "accepted", "feedback_rating": 1, "feedback_comment": "Great answer!"},
+            )
+        finally:
+            client.app.dependency_overrides.clear()
 
-        resp = client.post(
-            f"/api/v1/feedback/{VALID_QUERY_ID}",
-            json={"status": "accepted", "feedback_rating": 1, "feedback_comment": "Great answer!"},
-        )
         assert resp.status_code == 201
         body = resp.json()
         assert body["status"] == "accepted"
@@ -288,8 +298,7 @@ class TestFeedbackEndpoint:
         assert body["query_id"] == VALID_QUERY_ID
 
     @patch("routers.query.query_logger")
-    @patch("routers.query.get_db")
-    def test_201_rejected_with_thumbs_down(self, mock_get_db, mock_logger, client):
+    def test_201_rejected_with_thumbs_down(self, mock_logger, client):
         db = MagicMock()
         query_row = MagicMock()
         query_row.id = uuid.uuid4()
@@ -305,18 +314,21 @@ class TestFeedbackEndpoint:
         decision_row.feedback_rating = -1
         decision_row.created_at = None
         mock_logger.log_decision.return_value = decision_row
-        mock_get_db.return_value = iter([db])
+        
+        client.app.dependency_overrides[get_db] = lambda: db
+        try:
+            resp = client.post(
+                f"/api/v1/feedback/{VALID_QUERY_ID}",
+                json={"status": "rejected", "feedback_rating": -1},
+            )
+        finally:
+            client.app.dependency_overrides.clear()
 
-        resp = client.post(
-            f"/api/v1/feedback/{VALID_QUERY_ID}",
-            json={"status": "rejected", "feedback_rating": -1},
-        )
         assert resp.status_code == 201
         assert resp.json()["feedback_rating"] == -1
 
     @patch("routers.query.query_logger")
-    @patch("routers.query.get_db")
-    def test_201_review_no_rating(self, mock_get_db, mock_logger, client):
+    def test_201_review_no_rating(self, mock_logger, client):
         db = MagicMock()
         query_row = MagicMock()
         query_row.id = uuid.uuid4()
@@ -332,12 +344,16 @@ class TestFeedbackEndpoint:
         decision_row.feedback_rating = None
         decision_row.created_at = None
         mock_logger.log_decision.return_value = decision_row
-        mock_get_db.return_value = iter([db])
+        
+        client.app.dependency_overrides[get_db] = lambda: db
+        try:
+            resp = client.post(
+                f"/api/v1/feedback/{VALID_QUERY_ID}",
+                json={"status": "review"},
+            )
+        finally:
+            client.app.dependency_overrides.clear()
 
-        resp = client.post(
-            f"/api/v1/feedback/{VALID_QUERY_ID}",
-            json={"status": "review"},
-        )
         assert resp.status_code == 201
         assert resp.json()["status"] == "review"
 
