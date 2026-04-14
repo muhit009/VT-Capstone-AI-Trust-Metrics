@@ -54,7 +54,7 @@ from typing import Optional, List
 
 from sqlalchemy.orm import Session
 
-from models.db_models import Query, Answer, ConfidenceSignal, Evidence
+from models.db_models import Query, Answer, ConfidenceSignal, Evidence, Decision
 
 logger = logging.getLogger(__name__)
 
@@ -266,6 +266,90 @@ class QueryLogger:
             return evidence_row
         except Exception as exp:
             logger.error("Failed to log evidence: %s", exp, exc_info=True)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            return None
+
+    # ------------------------------------------------------------------
+    # Decision + Feedback logging
+    # ------------------------------------------------------------------
+
+    def log_decision(
+        self,
+        db: Session,
+        answer_row: Optional[Answer],
+        status: str,
+        rationale: Optional[str] = None,
+        feedback_rating: Optional[int] = None,
+        feedback_comment: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Optional[Decision]:
+        """
+        Insert or update a Decision row linking a user action and feedback
+        to a specific answer.
+
+        Parameters
+        ----------
+        db               : Active SQLAlchemy session.
+        answer_row       : The Answer ORM instance to attach the decision to.
+                           If None, this method is a no-op.
+        status           : Decision action — "accepted", "review", or "rejected".
+        rationale        : Optional free-text explanation for the decision.
+        feedback_rating  : 1 (thumbs up) or -1 (thumbs down). None if not rated.
+        feedback_comment : Optional free-text feedback comment.
+        user_id          : Optional UUID string of the user making the decision.
+
+        Returns
+        -------
+        Decision ORM instance on success, None on any failure.
+        """
+        if answer_row is None:
+            return None
+
+        valid_statuses = {"accepted", "review", "rejected"}
+        if status not in valid_statuses:
+            logger.warning(
+                "Invalid decision status %r — must be one of %s. Skipping.",
+                status, valid_statuses,
+            )
+            return None
+
+        if feedback_rating is not None and feedback_rating not in (1, -1):
+            logger.warning(
+                "Invalid feedback_rating %r — must be 1 or -1. Storing as None.",
+                feedback_rating,
+            )
+            feedback_rating = None
+
+        try:
+            uid = None
+            if user_id:
+                try:
+                    uid = uuid.UUID(str(user_id))
+                except ValueError:
+                    logger.warning("Invalid user_id format '%s' — logging without user.", user_id)
+
+            decision_row = Decision(
+                answer_id=answer_row.id,
+                user_id=uid,
+                status=status,
+                rationale=rationale,
+                feedback_rating=feedback_rating,
+                feedback_comment=feedback_comment,
+            )
+            db.add(decision_row)
+            db.commit()
+
+            logger.info(
+                "Logged decision id=%s answer_id=%s status=%s rating=%s",
+                decision_row.id, answer_row.id, status, feedback_rating,
+            )
+            return decision_row
+
+        except Exception as exc:
+            logger.error("Failed to log decision: %s", exc, exc_info=True)
             try:
                 db.rollback()
             except Exception:

@@ -413,3 +413,161 @@ async def get_result(
             query_row.created_at.isoformat() if query_row.created_at else None
         ),
     )
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/feedback/{query_id}
+# ---------------------------------------------------------------------------
+ 
+class FeedbackRequest(BaseModel):
+    """
+    Request body for POST /api/v1/feedback/{query_id}.
+ 
+    Fields
+    ------
+    status           : Decision action. One of "accepted", "review", "rejected".
+    rationale        : Optional free-text explanation for the decision.
+    feedback_rating  : 1 (thumbs up) or -1 (thumbs down). Omit if not rating.
+    feedback_comment : Optional free-text feedback comment.
+    user_id          : Optional UUID of the authenticated user.
+    """
+    status: str = Field(
+        ...,
+        description="Decision action: 'accepted', 'review', or 'rejected'.",
+        pattern=r"^(accepted|review|rejected)$",
+    )
+    rationale: Optional[str] = Field(
+        default=None,
+        max_length=2048,
+        description="Optional free-text explanation for the decision.",
+    )
+    feedback_rating: Optional[int] = Field(
+        default=None,
+        description="Thumbs up (1) or thumbs down (-1). Omit if not rating.",
+    )
+    feedback_comment: Optional[str] = Field(
+        default=None,
+        max_length=2048,
+        description="Optional free-text feedback comment.",
+    )
+    user_id: Optional[str] = Field(
+        default=None,
+        description="UUID of the authenticated user. Null for anonymous.",
+    )
+ 
+    @field_validator("feedback_rating")
+    @classmethod
+    def rating_must_be_thumbs(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v not in (1, -1):
+            raise ValueError("feedback_rating must be 1 (thumbs up) or -1 (thumbs down).")
+        return v
+ 
+    @field_validator("user_id")
+    @classmethod
+    def validate_user_id(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        try:
+            UUID(v)
+        except ValueError:
+            raise ValueError(f"user_id must be a valid UUID, got: {v!r}")
+        return v
+ 
+ 
+class FeedbackResponse(BaseModel):
+    """Response returned after successfully logging feedback."""
+    query_id:        str
+    decision_id:     str
+    status:          str
+    feedback_rating: Optional[int]
+    created_at:      Optional[str]
+ 
+ 
+@router.post(
+    "/feedback/{query_id}",
+    response_model=FeedbackResponse,
+    status_code=http_status.HTTP_201_CREATED,
+    summary="Submit user feedback and decision for a query result",
+    description=(
+        "Logs a user decision (accept/review/reject) and optional feedback "
+        "(thumbs up/down + comment) for the answer identified by query_id. "
+        "The decision is linked to the most recent Answer row for the given query. "
+        "Timestamps are set automatically in UTC."
+    ),
+    responses={
+        201: {"description": "Feedback logged successfully."},
+        400: {"description": "Invalid query_id format or invalid feedback values."},
+        404: {"description": "No query or answer found for the given query_id."},
+        422: {"description": "Validation error — invalid status or rating value."},
+    },
+)
+async def submit_feedback(
+    query_id: str,
+    payload: FeedbackRequest,
+    db: Session = Depends(get_db),
+) -> FeedbackResponse:
+    """
+    Log a user decision and feedback for a previously submitted query.
+ 
+    Looks up the query by query_id (stored in params JSONB), then finds
+    the most recent Answer for that query, and writes a Decision row with
+    the provided status, rationale, feedback rating, and comment.
+    """
+    # Validate query_id format
+    import re
+    if not re.match(r"^q_\d{8}_\d{6}_[a-z0-9]{6}$", query_id):
+        raise HTTPException(
+            status_code=http_status.HTTP_400_BAD_REQUEST,
+            detail=f"Malformed query_id: {query_id!r}. Expected format: q_YYYYMMDD_HHMMSS_xxxxxx",
+        )
+ 
+    # Look up query by query_id stored in params JSONB
+    query_row: Optional[QueryModel] = db.query(QueryModel).filter(
+        QueryModel.params["query_id"].astext == query_id
+    ).first()
+ 
+    if query_row is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"No query found with id={query_id!r}.",
+        )
+ 
+    # Find the most recent answer for this query
+    answer_row: Optional[AnswerModel] = (
+        db.query(AnswerModel)
+        .filter(AnswerModel.query_id == query_row.id)
+        .order_by(AnswerModel.created_at.desc())
+        .first()
+    )
+ 
+    if answer_row is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"No answer found for query_id={query_id!r}.",
+        )
+ 
+    # Log the decision
+    decision_row = query_logger.log_decision(
+        db=db,
+        answer_row=answer_row,
+        status=payload.status,
+        rationale=payload.rationale,
+        feedback_rating=payload.feedback_rating,
+        feedback_comment=payload.feedback_comment,
+        user_id=payload.user_id,
+    )
+ 
+    if decision_row is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to log feedback. Please try again.",
+        )
+ 
+    return FeedbackResponse(
+        query_id=query_id,
+        decision_id=str(decision_row.id),
+        status=decision_row.status,
+        feedback_rating=decision_row.feedback_rating,
+        created_at=(
+            decision_row.created_at.isoformat() if decision_row.created_at else None
+        ),
+    )

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Float, Text, ForeignKey, DateTime, func
+from sqlalchemy import Column, String, Integer, Float, Text, ForeignKey, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from database import Base
@@ -67,5 +67,8 @@ class Decision(Base, TimestampMixin):
     status = Column(String(50)) # e.g., "approved", "flagged"
     rationale = Column(Text)
     
+    feedback_rating = Column(Integer)   # 1 = thumbs up, -1 = thumbs down
+    feedback_comment = Column(Text)
+
     answer = relationship("Answer", back_populates="decisions")
     

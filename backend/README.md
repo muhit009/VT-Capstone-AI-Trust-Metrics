@@ -12,13 +12,14 @@ GroundCheck is a confidence-scoring engine for RAG-based enterprise AI systems. 
 2. Constructs a prompt and generates an answer via an LLM (local Ollama or HPC vLLM)
 3. Scores the answer using two independent signals — NLI-based grounding and token-probability generation confidence — fused into a single 0–100 score with a HIGH / MEDIUM / LOW tier
 4. Returns a fully structured `GroundCheckResponse` JSON with the answer, confidence data, citations, and metadata
+5. Logs the full request audit trail to PostgreSQL: query, answer, confidence signals, retrieved evidence, and user decisions
 
 ---
 
 ## Architecture
 
 ```
-User Query (HTTP POST /v1/rag/query)
+User Query (HTTP POST /api/v1/query)
     │
     ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -47,7 +48,7 @@ User Query (HTTP POST /v1/rag/query)
 │  · Filter Mistral special tokens                        │
 │  · Mean token probability → normalize [0, 1]            │
 │                                                         │
-│  fusion.py                                              │
+│  fusion.py + tier_categorizer.py                        │
 │  · 0.7 × S1 + 0.3 × S2 → score 0–100 + tier           │
 │  · Graceful degradation if one signal fails             │
 └─────────────────────────────────────────────────────────┘
@@ -56,22 +57,22 @@ User Query (HTTP POST /v1/rag/query)
 response_models.py → GroundCheckResponse JSON
     │
     ▼
-HTTP Response + Supabase (PostgreSQL) audit log
+logger.py → PostgreSQL audit log
+    Query · Answer · ConfidenceSignal · Evidence · Decision
 ```
 
 ---
 
 ## Dual LLM Setup
 
-The backend has two separate LLM paths. They are not interchangeable via a single config switch — each uses a different client and inference mechanism:
+The backend supports two LLM paths selected by the `PIPELINE` environment variable:
 
-| Environment | LLM | How it works | When to use |
+| Environment | `PIPELINE` value | LLM | Client |
 |---|---|---|---|
-| Local dev (downloaded model) | Any HuggingFace model (e.g. `mistralai/Mistral-7B-Instruct-v0.2`) | `services/model_service.py` loads the model directly via `transformers` + `bitsandbytes` 4-bit quantization | Running on a local GPU with enough VRAM |
-| Local dev (Ollama) | `mistral:7b-instruct` | `confidence/ollama_client.py` calls the Ollama HTTP API | Faster local dev without loading weights into Python — requires `ollama serve` |
-| HPC (VT ARC) | `mistral-small-24b` | `confidence/vllm_client.py` calls the vLLM OpenAI-compatible HTTP API | Production inference on the HPC cluster via `vllm_server.sh` |
+| Local dev | `ollama` (default) | `mistral:7b-instruct` | `confidence/ollama_client.py` — calls Ollama HTTP API |
+| HPC (VT ARC) | `vllm` | `mistral-small-24b` | `confidence/vllm_client.py` — calls vLLM OpenAI-compatible API |
 
-To switch between the Ollama and vLLM paths, change which client is called in `services/model_service.py`. The model ID for the transformers path is set via `DEFAULT_MODEL_ID` at the top of that file.
+Set `PIPELINE=vllm` in your HPC environment. No code changes needed to switch.
 
 ---
 
@@ -83,53 +84,61 @@ To switch between the Ollama and vLLM paths, change which client is called in `s
 |---|---|
 | `main.py` | FastAPI app setup. Registers routers, CORS middleware, and wires `model_executor` into `rag_orchestrator` via the `lifespan` context manager. |
 | `init_db.py` | Creates all PostgreSQL tables on Supabase using `Base.metadata.create_all()`. Run once on first deploy. |
-| `reset_db.py` | Drops and recreates all tables. Use with caution — deletes all data. |
+| `reset_db.py` | Drops and recreates all tables. Prompts for confirmation. Use with caution — deletes all data. |
 
 ### API Layer
 
 | File | Purpose |
 |---|---|
-| `routers/inference.py` | Two endpoints: `POST /v1/predict` (raw LLM inference) and `POST /v1/rag/query` (full RAG + confidence pipeline returning `GroundCheckResponse`). |
-| `routers/documents.py` | Document management endpoints: upload PDFs/text files, trigger ingestion into ChromaDB, list and delete documents. |
-| `models/schemas.py` | Pydantic request/response models for the API layer: `InferenceRequest`, `RAGInferenceRequest`, `InferenceResponse`, `ConfidenceMetrics`. |
-| `response_models.py` | Full `GroundCheckResponse` Pydantic schema (Issue #86). Includes `ConfidenceData`, `CitationModel`, `ResponseMetadata`, `ErrorInfo`, and `ResponseBuilder` factory. This is what the frontend consumes. |
+| `routers/query.py` | Primary endpoints: `POST /api/v1/query` (full RAG + confidence pipeline), `GET /api/v1/results/{query_id}` (retrieve stored result), `POST /api/v1/feedback/{query_id}` (submit decision and feedback). |
+| `routers/inference.py` | Legacy endpoints: `POST /v1/predict` (raw LLM inference) and `POST /v1/rag/query` (RAG without audit logging). Kept for backward compatibility. |
+| `routers/documents.py` | Document management: upload PDFs/text files, trigger ingestion into ChromaDB, list and delete documents. |
+| `models/schemas.py` | Pydantic request/response models: `InferenceRequest`, `RAGInferenceRequest`, `InferenceResponse`, `ConfidenceMetrics`. |
+| `response_models.py` | Full `GroundCheckResponse` Pydantic schema. Includes `ConfidenceData`, `CitationModel`, `ResponseMetadata`, `ErrorInfo`, and `ResponseBuilder` factory. This is what the frontend consumes. |
+
+### Audit Logging
+
+| File | Purpose |
+|---|---|
+| `logger.py` | `QueryLogger` — all audit logging to PostgreSQL. Four methods: `log_query()`, `log_answer()`, `log_evidence()`, `log_decision()`. All methods are fault-tolerant — failures are caught and logged without interrupting the request path. Singleton: `query_logger`. |
 
 ### RAG Pipeline
 
 | File | Purpose |
 |---|---|
-| `document_ingestion.py` | Reads PDFs and text files, extracts text page-by-page, and passes structured `doc_data` dicts to `chunking.py`. |
-| `chunking.py` | Splits document pages into overlapping chunks (~500 tokens / 2000 chars, 50-token overlap) using LangChain `RecursiveCharacterTextSplitter`. Returns `List[Dict]` with `text`, `source`, `page_num`, `chunk_index`. |
-| `embedding.py` | Wraps `sentence-transformers/all-MiniLM-L6-v2`. Provides `generate_embeddings(chunks)` for ingestion and `embed_query(query)` for retrieval. Singleton: `embedding_service`. |
+| `document_ingestion.py` | Reads PDFs and text files, extracts text page-by-page. Returns structured `doc_data` dicts. |
+| `chunking.py` | Splits document pages into overlapping chunks (~500 tokens / 2000 chars, 50-token overlap) using LangChain `RecursiveCharacterTextSplitter`. |
+| `embedding.py` | Wraps `sentence-transformers/all-MiniLM-L6-v2`. Provides `generate_embeddings(chunks)` and `embed_query(query)`. Singleton: `embedding_service`. |
 | `vector_store.py` | Wraps ChromaDB `PersistentClient`. Stores chunks + embeddings, queries by cosine similarity, supports add/update/delete by source document. Singleton: `vector_store`. |
 | `retrieval.py` | Orchestrates query embedding → ChromaDB search → cosine distance to similarity conversion → threshold filtering → ranked `List[Citation]`. Also provides `format_context()` for LLM prompt injection. Singleton: `retrieval_pipeline`. |
-| `rag_orchestrator.py` | LangChain LCEL orchestration. Defines system prompt and RAG prompt templates. Calls `retrieval_pipeline.retrieve()` then `model_service.generate()`. Returns `RAGResponse` dataclass. Singleton: `rag_orchestrator`. |
-| `services/model_service.py` | Wraps the LLM. Handles tokenization, generation, token log-probability extraction, DB logging of `Query` / `Answer` / `ConfidenceSignal` rows, and returns `InferenceResponse`. Stores `_last_logprobs` for the confidence engine to consume. Singleton: `model_executor`. |
+| `rag_orchestrator.py` | Defines system prompt and RAG prompt templates. Calls `retrieval_pipeline.retrieve()` then `model_service.generate()`. Returns `RAGResponse` dataclass. Singleton: `rag_orchestrator`. |
+| `services/model_service.py` | Routes to Ollama or vLLM based on `PIPELINE` env var. Calls the configured client, stores `_last_logprobs` for the confidence engine, and returns `InferenceResponse`. Singleton: `model_executor`. |
 
 ### Confidence Engine (`confidence/`)
 
 | File | Purpose |
 |---|---|
-| `confidence/engine.py` | Top-level integration point. `ConfidenceEngine.score(answer, chunks, logprobs)` calls both scorers, fuses results, and returns `ConfidenceResult`. Singleton: `confidence_engine`. |
-| `confidence/grounding_scorer.py` | **Signal 1.** Extracts claims from the answer (NLTK sentence splitting), runs all (claim, chunk) pairs through DeBERTa-v3-small NLI, and computes mean max-entailment as `grounding_score` (0–1). Also returns per-claim `ClaimDetail` for citation entailment enrichment. Singleton: `grounding_scorer`. |
-| `confidence/generation_confidence.py` | **Signal 2.** Filters Mistral special tokens from logprobs, computes mean token probability, normalizes to [0, 1] using `clip((raw − 0.3) / 0.6)`. Returns `GenConfidenceResult` with `score`, `level` (HIGHLY_CONFIDENT / MODERATE / UNCERTAIN), and `raw_mean_prob`. Singleton: `generation_confidence_scorer`. |
-| `confidence/fusion.py` | Fuses Signal 1 and Signal 2: `score = round(0.7 × grounding + 0.3 × gen_conf) × 100`. Assigns tier (HIGH ≥ 70, MEDIUM ≥ 40, LOW < 40). Handles graceful degradation when one signal is missing — the available signal receives full weight (1.0). |
-| `confidence/ollama_client.py` | HTTP client for local Ollama server. Calls `POST /api/generate` and parses logprobs from the response. Used in local dev. |
-| `confidence/vllm_client.py` | HTTP client for the vLLM server on VT ARC HPC. Calls the OpenAI-compatible `/v1/completions` endpoint with `logprobs=1`. Used in production. |
-| `confidence/config.py` | All tunable constants: model names, normalization bounds, fusion weights, tier thresholds, retry settings. **Single source of truth** — change values here, not in individual files. |
+| `confidence/engine.py` | Top-level integration point. `ConfidenceEngine.score(answer, chunks, logprobs)` calls both scorers, fuses results, returns `ConfidenceResult`. Singleton: `confidence_engine`. |
+| `confidence/grounding_scorer.py` | **Signal 1.** Extracts claims (NLTK), runs all (claim, chunk) pairs through DeBERTa-v3-small NLI, computes mean max-entailment as `grounding_score` (0–1). Singleton: `grounding_scorer`. |
+| `confidence/generation_confidence.py` | **Signal 2.** Filters Mistral special tokens from logprobs, computes mean token probability, normalizes to [0, 1]. Level: HIGHLY_CONFIDENT / MODERATE / UNCERTAIN. Singleton: `generation_confidence_scorer`. |
+| `confidence/fusion.py` | Fuses Signal 1 and Signal 2: `score = round(0.7 × grounding + 0.3 × gen_conf) × 100`. Graceful degradation when one signal is missing. |
+| `confidence/tier_categorizer.py` | Single source of truth for tier assignment (HIGH ≥ 70, MEDIUM ≥ 40, LOW < 40). Thresholds configurable via `config.py`. |
+| `confidence/ollama_client.py` | HTTP client for local Ollama server (`/api/generate`). Parses logprobs from response. Local dev only. |
+| `confidence/vllm_client.py` | HTTP client for the vLLM server on VT ARC HPC (`/v1/completions`, `logprobs=1`). Retry logic included. |
+| `confidence/config.py` | All tunable constants: model names, normalization bounds, fusion weights, tier thresholds, retry settings. **Single source of truth.** |
 
 ### Database
 
 | File | Purpose |
 |---|---|
-| `database.py` | SQLAlchemy engine + session factory pointing to Supabase PostgreSQL. Uses `pool_pre_ping=True` and `sslmode=require`. Provides `get_db()` FastAPI dependency. |
-| `models/db_models.py` | SQLAlchemy ORM models: `User`, `Query`, `Answer`, `ConfidenceSignal`, `Evidence`, `Decision`. All use UUID primary keys and JSONB for flexible metadata. |
+| `database.py` | SQLAlchemy engine + session factory. Validates all required env vars at startup. Provides `get_db()` FastAPI dependency. |
+| `models/db_models.py` | ORM models: `User`, `Query`, `Answer`, `ConfidenceSignal`, `Evidence`, `Decision`. All use UUID primary keys and JSONB for metadata. |
 
 ### Configuration
 
 | File | Purpose |
 |---|---|
-| `config.py` | Backend-level constants: chunking sizes, embedding model, ChromaDB path, file upload settings, vLLM model and engine parameters. |
+| `config.py` | Backend-level constants: chunking sizes, embedding model, ChromaDB path, file upload settings. |
 | `confidence/config.py` | Confidence engine constants: Ollama/vLLM URLs, NLI model name, normalization bounds, fusion weights, tier thresholds. |
 | `.env` | Secret runtime values (never committed): `DB_IP`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`. |
 
@@ -139,62 +148,68 @@ To switch between the Ollama and vLLM paths, change which client is called in `s
 |---|---|
 | `tests/test_chunking.py` | `chunk_document()` splits correctly, metadata fields populated, overlap respected. |
 | `tests/test_embedding.py` | `EmbeddingService.embed_query()` and `generate_embeddings()` return correct shapes. |
-| `tests/test_vector_store.py` | ChromaDB add/query/delete/update/list operations with mock data. |
-| `tests/test_ingestion.py` | Full ingestion pipeline: PDF → chunks → embeddings → vector store. |
-| `tests/test_retrieval.py` | `RetrievalPipeline.retrieve()` ranking, threshold filtering, metadata mapping, empty query handling. All dependencies mocked. |
+| `tests/test_vector_store.py` | ChromaDB add/query/delete/update/list operations. Persistence across instances verified. |
+| `tests/test_ingestion.py` | File validation, PDF/text extraction, encoding detection. |
+| `tests/test_retrieval.py` | `RetrievalPipeline.retrieve()` ranking, threshold filtering, metadata mapping, empty query handling. |
 | `tests/test_generation_confidence.py` | Signal 2: normalization, special-token filtering, empty input degradation, level classification. |
-| `tests/test_fusion.py` | Fusion formula, tier boundaries, degraded mode (one signal missing), both-missing edge case. |
+| `tests/test_fusion.py` | Fusion formula, tier boundaries, degraded mode, NaN/inf handling. |
+| `tests/test_tier_categorizer.py` | All tier boundaries (exactly on threshold, just above/below), clamping, `tier_label()` wrapper. |
 | `tests/test_rag_orchestrator.py` | `RAGOrchestrator.run()` end-to-end with mocked retrieval and model service. |
+| `tests/test_rag_pipeline.py` | Full pipeline integration: retrieval → response building. Happy path, degraded mode, empty retrieval. |
 | `tests/test_response_models.py` | `GroundCheckResponse` schema validation, `ResponseBuilder.from_rag_run()`, citation enrichment, error response shape. |
-| `tests/conftest.py` | Shared pytest fixtures (DB session mocks, sample chunks, etc.). |
+| `tests/test_logger.py` | `QueryLogger`: log_query, log_answer, log_evidence, log_decision. All failure paths verified. |
+| `tests/test_feedback.py` | `POST /api/v1/feedback/{query_id}`: all status/rating combinations, validation errors, 404 paths. |
+| `tests/test_query_router.py` | `POST /api/v1/query` and `GET /api/v1/results/{query_id}` validation and success paths. |
+| `tests/conftest.py` | Prevents heavyweight NLI model loading during unit tests via confidence package stub. |
 
 ### Dev & Benchmarking
 
 | File | Purpose |
 |---|---|
-| `dev/local_pipeline.py` | End-to-end local test: Ollama → retrieval → confidence scoring. Requires `ollama serve` running. |
-| `dev/hpc_pipeline.py` | End-to-end HPC test: vLLM → retrieval → confidence scoring. Requires vLLM server running. |
-| `dev/benchmark_gen_confidence.py` | Measures Signal 2 latency overhead against typical Mistral inference times. |
-| `benchmark_vector_store.py` | Measures ChromaDB query latency at various collection sizes. |
-| `test_api.py` | Manual HTTP smoke tests against the running FastAPI server. |
+| `benchmark_vector_store.py` | Measures ChromaDB query latency at collection sizes 100–5000. Verifies < 100ms requirement. |
 
 ---
 
 ## Data Flow: Full Request Lifecycle
 
 ```
-POST /v1/rag/query  { "query": "What is the yield strength of A36 steel?" }
+POST /api/v1/query  { "query": "What is the yield strength of A36 steel?" }
     │
-    ├─ 1. retrieval_pipeline.retrieve(query, top_k=5)
-    │       → embed_query() → ChromaDB.query() → List[Citation]
+    ├─ 1. logger.log_query()                       → DB: Query row
     │
-    ├─ 2. rag_orchestrator.run(query, db, top_k)
+    ├─ 2. retrieval_pipeline.retrieve(query, top_k=5)
+    │       → embed_query() → ChromaDB → List[Citation]
+    │
+    ├─ 3. rag_orchestrator.run(query, db, top_k)
     │       → format_context(citations) → RAG_CHAT_PROMPT
-    │       → model_executor.generate(prompt, db)
-    │           → LLM (Ollama or vLLM)
-    │           → DB log: Query + Answer + ConfidenceSignal rows
-    │           → stores _last_logprobs
-    │       → RAGResponse { answer, citations, confidence, model_name, ... }
+    │       → model_executor.generate(prompt)
+    │           → Ollama or vLLM → answer + logprobs
+    │       → RAGResponse { answer, citations, model_name, ... }
     │
-    ├─ 3. grounding_scorer.compute(answer, chunk_texts)
-    │       → NLTK claim extraction
-    │       → DeBERTa NLI batch inference
+    ├─ 4. grounding_scorer.compute(answer, chunk_texts)
+    │       → NLTK claim extraction → DeBERTa NLI
     │       → GroundingResult { grounding_score, claim_details }
     │
-    ├─ 4. confidence_engine.score(answer, chunk_texts, logprobs)
-    │       → grounding_scorer + generation_confidence_scorer
-    │       → fusion.fuse(grounding_score, gen_confidence)
-    │       → ConfidenceResult { score, tier, signals, degraded, warning }
+    ├─ 5. confidence_engine.score(answer, chunk_texts, logprobs)
+    │       → fusion.fuse() → tier_categorizer.categorize_tier()
+    │       → ConfidenceResult { score, tier, signals, degraded }
     │
-    └─ 5. ResponseBuilder.from_rag_run(...)
-            → enrich citations with entailment scores
+    ├─ 6. logger.log_answer()                      → DB: Answer + ConfidenceSignal rows
+    │      logger.log_evidence()                   → DB: Evidence rows (one per citation)
+    │
+    └─ 7. ResponseBuilder.from_rag_run(...)
             → GroundCheckResponse {
                 query_id, query, answer,
                 confidence: { final_score, tier, signals, weights, explanation },
-                citations: [ { document, page, similarity_score, entailment_score, ... } ],
+                citations: [ { document, page, similarity_score, entailment_score } ],
                 metadata:  { model, nli_model, timestamp, processing_time_ms },
                 status: "success" | "partial_success" | "error"
               }
+
+POST /api/v1/feedback/{query_id}  { "status": "accepted", "feedback_rating": 1 }
+    │
+    └─ logger.log_decision()                       → DB: Decision row
+            { status, rationale, feedback_rating, feedback_comment, user_id }
 ```
 
 ---
@@ -206,6 +221,7 @@ POST /v1/rag/query  { "query": "What is the yield strength of A36 steel?" }
 ```bash
 python -m venv venv
 venv\Scripts\activate        # Windows
+# source venv/bin/activate   # macOS/Linux
 pip install -r requirements.txt
 ```
 
@@ -219,6 +235,7 @@ DB_PORT=5432
 DB_NAME=postgres
 DB_USER=postgres
 DB_PASS=your-supabase-password
+PIPELINE=ollama   # or "vllm" for HPC
 ```
 
 ### 3. Initialize the database
@@ -238,6 +255,7 @@ uvicorn main:app --reload --port 8000
 
 **HPC (vLLM):**
 ```bash
+export PIPELINE=vllm
 bash vllm_server.sh                 # starts vLLM on the HPC node
 uvicorn main:app --port 8000
 ```
@@ -254,14 +272,16 @@ pytest tests/ -v
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/v1/rag/query` | Full RAG pipeline — returns `GroundCheckResponse` |
-| `POST` | `/v1/predict` | Raw LLM inference — returns `InferenceResponse` |
+| `POST` | `/api/v1/query` | Full RAG pipeline — returns `GroundCheckResponse` with confidence score, tier, and citations |
+| `GET` | `/api/v1/results/{query_id}` | Retrieve a stored query result by ID |
+| `POST` | `/api/v1/feedback/{query_id}` | Submit user decision (accept/review/reject) and feedback (thumbs up/down + comment) |
+| `POST` | `/v1/predict` | Raw LLM inference — returns `InferenceResponse` (legacy) |
 | `GET` | `/v1/health` | Health check |
 | `POST` | `/v1/documents/upload` | Upload and ingest a PDF or text file |
 | `GET` | `/v1/documents/` | List all ingested documents |
 | `DELETE` | `/v1/documents/{filename}` | Delete a document and its chunks |
 
-Full OpenAPI docs available at `http://localhost:8000/docs` when the server is running.
+Full OpenAPI/Swagger docs available at `http://localhost:8000/docs` when the server is running.
 
 ---
 
@@ -286,11 +306,13 @@ Full OpenAPI docs available at `http://localhost:8000/docs` when the server is r
 | `fastapi` | Web framework |
 | `uvicorn` | ASGI server |
 | `sqlalchemy` | ORM for Supabase PostgreSQL |
+| `psycopg2-binary` | PostgreSQL driver |
 | `pydantic` | Request/response validation |
 | `chromadb` | Vector store |
 | `sentence-transformers` | Embedding model (all-MiniLM-L6-v2) |
-| `langchain-core` | Prompt templates and LCEL chain composition |
-| `transformers` | DeBERTa NLI model + tokenizer (grounding scorer) |
+| `langchain-core` | Prompt templates |
+| `langchain-text-splitters` | Document chunking |
+| `transformers` | DeBERTa NLI model (grounding scorer) |
 | `nltk` | Sentence tokenization for claim extraction |
-| `torch` | Required by transformers and sentence-transformers |
+| `requests` | Ollama and vLLM HTTP clients |
 | `python-dotenv` | `.env` file loading |
