@@ -1,0 +1,30 @@
+# Web framework
+fastapi
+uvicorn
+python-multipart
+pydantic
+
+# Database
+sqlalchemy
+python-dotenv
+psycopg2-binary
+
+# LLM clients + Utils + Testing
+requests
+numpy
+pytest
+
+# Embeddings + NLI 
+sentence-transformers
+nltk
+
+# Vector store
+chromadb
+
+# Document Ingestion
+pdfplumber
+chardet
+
+# RAG orchestration
+langchain-core
+langchain-text-splitters

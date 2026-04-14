@@ -1,0 +1,759 @@
+{
+  "metadata": {
+    "dataset_name": "GroundCheck Validation Dataset",
+    "version": "1.0",
+    "created": "2026-04-04",
+    "total_questions": 60,
+    "corpus": [
+      {
+        "filename": "nasa_systems_engineering_handbook_0.pdf",
+        "short_name": "NASA_SE_Handbook",
+        "page_count": 297,
+        "description": "NASA Systems Engineering Handbook (SP-2016-6105 Rev2)"
+      },
+      {
+        "filename": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+        "short_name": "Rockets_LV",
+        "page_count": 46,
+        "description": "Rockets and Launch Vehicles — Chapter 4.2.1 (Space Mission Engineering textbook)"
+      },
+      {
+        "filename": "3761047-9e1f89324ac7ad383fce29136ec25754.pdf",
+        "short_name": "Boeing727_MM",
+        "page_count": 25,
+        "description": "Boeing 727 Maintenance Manual — Parking and Mooring section"
+      }
+    ],
+    "distribution": {
+      "factual_lookup":     { "count": 18, "target_pct": 30, "expected_tier": "HIGH" },
+      "multi_step":         { "count": 18, "target_pct": 30, "expected_tier": "HIGH or MEDIUM" },
+      "out_of_scope":       { "count": 12, "target_pct": 20, "expected_tier": "LOW" },
+      "edge_case":          { "count": 12, "target_pct": 20, "expected_tier": "MEDIUM or LOW" }
+    },
+    "answer_verification": "All factual and multi-step answers verified against extracted page text from the ingested corpus. Out-of-scope answers verified to be absent from all three documents. See validation_dataset_readme.md for methodology.",
+    "schema_version": "1.0"
+  },
+  "questions": [
+
+    {
+      "id": "F01",
+      "question": "What is the formula for specific impulse as defined in the Rockets and Launch Vehicles textbook?",
+      "correct_answer": "Specific impulse is defined as I_sp = F_thrust / (mdot * g_0), where F_thrust is the force of thrust in Newtons, mdot is the propellant's mass flow rate in kg/s, and g_0 is the gravitational acceleration constant (9.81 m/s²). It represents rocket efficiency — the ratio of momentum change (what we get) to propellant consumed (what we spend).",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 6,
+      "question_type": "factual_lookup",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Direct formula from the text. The textbook uses equation 4.2.1-2."
+    },
+
+    {
+      "id": "F02",
+      "question": "How high can the exhaust velocity reach for typical chemical rockets similar to the Space Shuttle?",
+      "correct_answer": "For typical chemical rockets similar to the Space Shuttle, the exhaust velocity can be as high as 3 km/s.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 5,
+      "question_type": "factual_lookup",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Stated directly in the text."
+    },
+
+    {
+      "id": "F03",
+      "question": "How much total power did the Space Shuttle's main engines plus solid-rocket boosters produce at lift-off, and what was that compared to in the textbook?",
+      "correct_answer": "At lift-off, the Space Shuttle's three main engines plus its solid-rocket boosters produced 26.6 billion watts of power, which is equivalent to 13 Hoover Dams.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 5,
+      "question_type": "factual_lookup",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Both the watt figure and the Hoover Dam comparison are stated in the same sentence."
+    },
+
+    {
+      "id": "F04",
+      "question": "What are the typical fuel, oxidizer, and binder used in solid rocket propellants?",
+      "correct_answer": "Solid rockets typically use Aluminum as the fuel, Ammonium perchlorate (AP) as the oxidizer, and Hydroxyl-terminated polybutadiene (HTPB) as the binder.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 24,
+      "question_type": "factual_lookup",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "From Table 4.2.1-4 in the textbook."
+    },
+
+    {
+      "id": "F05",
+      "question": "What is the thrust-to-weight ratio at lift-off for the Atlas launch vehicle?",
+      "correct_answer": "The thrust-to-weight ratio at lift-off for the Atlas launch vehicle is about 1.2.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 39,
+      "question_type": "factual_lookup",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Stated directly alongside the Space Shuttle figure."
+    },
+
+    {
+      "id": "F06",
+      "question": "What is the thrust-to-weight ratio at lift-off for the Space Shuttle?",
+      "correct_answer": "The thrust-to-weight ratio at lift-off for the Space Shuttle is about 1.6.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 39,
+      "question_type": "factual_lookup",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Stated directly alongside the Atlas figure."
+    },
+
+    {
+      "id": "F07",
+      "question": "What propellants are used in cold-gas rockets?",
+      "correct_answer": "Cold-gas rockets use Helium (He), Nitrogen (N2), Carbon dioxide (CO2), or virtually any compressed gas as propellant.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 12,
+      "question_type": "factual_lookup",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "From Table 4.2.1-1 Summary of Cold-gas Rockets."
+    },
+
+    {
+      "id": "F08",
+      "question": "What is the specific impulse range for ion (electrostatic) thrusters?",
+      "correct_answer": "Ion (electrostatic) thrusters have a specific impulse range of approximately 2,000 to 10,000 seconds.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 31,
+      "question_type": "factual_lookup",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "From Table 4.2.1-10 Electrodynamic Rockets."
+    },
+
+    {
+      "id": "F09",
+      "question": "What is the electrical efficiency of Hall-effect thrusters (HET)?",
+      "correct_answer": "Hall-effect thrusters (HET) have an electrical efficiency of 60%.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 31,
+      "question_type": "factual_lookup",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "From Table 4.2.1-10. Ion thrusters are 90% for comparison."
+    },
+
+    {
+      "id": "F10",
+      "question": "What NASA document does SP-2016-6105 Rev2 supersede?",
+      "correct_answer": "NASA SP-2016-6105 Rev2 supersedes SP-2007-6105 Rev 1, dated December 2007.",
+      "source_document": "nasa_systems_engineering_handbook_0.pdf",
+      "page_number": 2,
+      "question_type": "factual_lookup",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Stated at the top of page 2."
+    },
+
+    {
+      "id": "F11",
+      "question": "What is the purpose of NASA Space Flight Phase B (Preliminary Design and Technology Completion)?",
+      "correct_answer": "The purpose of Phase B is to define the project in enough detail to establish an initial baseline capable of meeting mission needs. It also involves developing system structure end product requirements and generating a preliminary design for each system structure end product.",
+      "source_document": "nasa_systems_engineering_handbook_0.pdf",
+      "page_number": 36,
+      "question_type": "factual_lookup",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Taken from the Phase B description block."
+    },
+
+    {
+      "id": "F12",
+      "question": "What does the Operational Readiness Review (ORR) examine, and what is the result of a successful ORR?",
+      "correct_answer": "The ORR examines the actual system characteristics and procedures used in the system or end product's operation, ensuring that all system and support hardware, software, personnel, procedures, and user documentation accurately reflect the deployed state. As a result of a successful ORR completion, the system is ready to assume normal operations.",
+      "source_document": "nasa_systems_engineering_handbook_0.pdf",
+      "page_number": 173,
+      "question_type": "factual_lookup",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "From Table 6.7-1 Purpose and Results for Life-Cycle Reviews."
+    },
+
+    {
+      "id": "F13",
+      "question": "How is the Boeing 727 normally parked for short periods?",
+      "correct_answer": "The Boeing 727 is normally parked for short periods with chocks in front of and behind at least one main gear wheel per gear, and with the parking brakes off. The parking brake is used only to hold the airplane until chocks are in place.",
+      "source_document": "3761047-9e1f89324ac7ad383fce29136ec25754.pdf",
+      "page_number": 2,
+      "question_type": "factual_lookup",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "First paragraph of the Parking — Maintenance Practices section."
+    },
+
+    {
+      "id": "F14",
+      "question": "According to the Boeing 727 maintenance manual, in cold weather, when must fuel tank sumps be drained prior to fueling?",
+      "correct_answer": "In cold weather, fuel tank sumps must be drained prior to fueling if the airplane has been idle for more than 45 minutes before fueling. Sumps must be drained again after refueling if the airplane has been idle for 2 hours or more after refueling. This is because water can freeze and prevent the drain valves from opening.",
+      "source_document": "3761047-9e1f89324ac7ad383fce29136ec25754.pdf",
+      "page_number": 4,
+      "question_type": "factual_lookup",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Cold weather procedure stated twice in the document (pp. 4, 9, 21) with consistent content."
+    },
+
+    {
+      "id": "F15",
+      "question": "What must be done if a Boeing 727 has been parked for more than one year on the same heading before returning to service?",
+      "correct_answer": "If the airplane was parked for more than 1 year on the same heading, a compass swing must be performed (per AMM 34-24-00/201).",
+      "source_document": "3761047-9e1f89324ac7ad383fce29136ec25754.pdf",
+      "page_number": 21,
+      "question_type": "factual_lookup",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Step 6 in the return-to-service checklist."
+    },
+
+    {
+      "id": "F16",
+      "question": "What is the rocket equation (Tsiolkovsky equation) as presented in the Rockets and Launch Vehicles textbook?",
+      "correct_answer": "The rocket equation is ΔV = C × ln(m_initial / m_final), where ΔV is the velocity change in m/s, C is the effective exhaust velocity in m/s, ln is the natural logarithm, m_initial is the vehicle's initial mass before firing, and m_final is the vehicle's final mass after firing.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 7,
+      "question_type": "factual_lookup",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Equation 4.2.1-4 in the textbook."
+    },
+
+    {
+      "id": "F17",
+      "question": "What is the maximum specific impulse available from state-of-the-art chemical rockets?",
+      "correct_answer": "The maximum specific impulse available from state-of-the-art chemical rockets is about 470 seconds.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 43,
+      "question_type": "factual_lookup",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Stated in the staging section discussion."
+    },
+
+    {
+      "id": "F18",
+      "question": "What are the three basic types of chemical rockets?",
+      "correct_answer": "The three basic types of chemical rockets are liquid, solid, and hybrid.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 37,
+      "question_type": "factual_lookup",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "From the Section Review key concepts summary."
+    },
+
+    {
+      "id": "M01",
+      "question": "Why do all current launch vehicles use chemical rockets rather than electrodynamic rockets, despite the much higher specific impulse of electrodynamic systems?",
+      "correct_answer": "Current launch vehicles must have a thrust-to-weight ratio greater than 1.0 in order to lift off from Earth's surface. While electrodynamic rockets (such as ion thrusters and Hall-effect thrusters) offer significantly higher specific impulse and mass efficiency, they cannot produce sufficient thrust relative to their weight to meet this requirement. Chemical rockets, despite lower specific impulse (max ~470 s), can produce very high thrust and, critically, thrust-to-weight ratios greater than 1.0, making them the only viable current option for launch vehicles.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 39,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Requires combining the thrust-to-weight requirement (p.39) with the electrodynamic rocket limitations (pp.31, 37). Both are in the same document."
+    },
+
+    {
+      "id": "M02",
+      "question": "Comparing the single-stage and two-stage launch vehicle example from Table 4.2.1-11, how much more payload can the two-stage vehicle deliver to orbit compared to the single-stage vehicle, given the same design ΔV of 8000 m/s and Isp of 480 s?",
+      "correct_answer": "According to Table 4.2.1-11, with the same design ΔV of 8000 m/s and Isp of 480 s, the single-stage vehicle delivers 84 kg to orbit while the two-stage vehicle delivers 175 kg to orbit. The two-stage vehicle delivers approximately 108% more payload mass (91 kg more), or about 2.08 times the payload of the single-stage vehicle.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 44,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Numbers come directly from Table 4.2.1-11. The percentage calculation requires arithmetic but both source figures are in the corpus."
+    },
+
+    {
+      "id": "M03",
+      "question": "Why does adding more than three or four stages to a launch vehicle provide diminishing returns?",
+      "correct_answer": "Although each additional stage improves performance, the performance gains become progressively smaller with each stage. By the time a fourth or fifth stage is added, the increased complexity and reduced reliability offset the small performance gain. The second stage significantly improves performance over a single-stage vehicle, but each successive stage enhances it by less. This is why most launch vehicles in use have only three or four stages.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 45,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Explained directly in the staging section."
+    },
+
+    {
+      "id": "M04",
+      "question": "How does the pump-fed propellant delivery system on the Space Shuttle work, and what chamber feed pressure does it achieve?",
+      "correct_answer": "On the Space Shuttle, massive turbo pumps burn a relatively small amount of hydrogen and oxygen to produce mechanical energy. This energy takes the liquid propellants, normally stored at a few bars, and boosts the feed pressure to more than 480 bar (7,000 psi) before the propellants reach the combustion chamber.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 18,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Describes the pump-fed system mechanism and the specific pressure figure."
+    },
+
+    {
+      "id": "M05",
+      "question": "What is the difference between product verification and product validation in NASA systems engineering, and when is each emphasized?",
+      "correct_answer": "Product Verification confirms compliance with specified requirements through documented objective evidence and closure of all discrepancy actions — it checks that the product was built right. Product Validation confirms that the integrated realized end products conform to stakeholder expectations as captured in MOEs, MOPs, and ConOps — it checks that the right product was built. It is appropriate for verification and validation methods to differ between phases. Validation is especially important in Pre-Phase A and Phase A during design.",
+      "source_document": "nasa_systems_engineering_handbook_0.pdf",
+      "page_number": 21,
+      "question_type": "multi_step",
+      "difficulty": "hard",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Multi-step because the answer must combine pp.21 and 109 to give a complete picture."
+    },
+
+    {
+      "id": "M06",
+      "question": "What are the two criteria that must be met to complete product verification according to the NASA SE Handbook?",
+      "correct_answer": "The two criteria for completing verification of a product are: (1) documented objective evidence of compliance with requirements or waiver, and (2) closure of all discrepancy actions.",
+      "source_document": "nasa_systems_engineering_handbook_0.pdf",
+      "page_number": 109,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Both criteria are enumerated explicitly in the text."
+    },
+
+    {
+      "id": "M07",
+      "question": "What configuration baselines are established at each major design review milestone in the NASA SE lifecycle?",
+      "correct_answer": "Three configuration baselines are established at key design reviews: (1) the Functional Baseline is established at MDR/SRR (Mission Definition Review / System Requirements Review); (2) the Allocated Baseline is established at PDR (Preliminary Design Review); and (3) the Product Baseline (using Design-to-Spec for end items) is established at CDR (Critical Design Review).",
+      "source_document": "nasa_systems_engineering_handbook_0.pdf",
+      "page_number": 157,
+      "question_type": "multi_step",
+      "difficulty": "hard",
+      "expected_confidence_tier": "HIGH",
+      "notes": "From Figure 6.5-1 / the configuration management baseline diagram. Requires reading the table layout."
+    },
+
+    {
+      "id": "M08",
+      "question": "Why must pitot probe covers be removed before flight on the Boeing 727, and what specific hazards arise if they are left in place?",
+      "correct_answer": "Failure to remove pitot probe covers before flight may cause large errors in airspeed-sensing and altitude-sensing signals, which may lead to loss of safe flight. Additionally, engines should not be operated with covers in place because the covers can come off and damage the engines. The covers must also be in good working condition with no evidence of damage, especially fraying around the cover opening, as frayed fibers combined with other substances could pose additional hazards.",
+      "source_document": "3761047-9e1f89324ac7ad383fce29136ec25754.pdf",
+      "page_number": 17,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Multi-step because the full answer spans pp.17 and 19."
+    },
+
+    {
+      "id": "M09",
+      "question": "What visibility and crew notification requirements apply when static port covers are installed on the Boeing 727?",
+      "correct_answer": "When static ports are covered, the condition must be visible from the ground. In addition, a red paper tag with 'STATIC PORTS COVERED' printed in black letters must be attached to the left control wheel in the flight deck as a reminder to flight crew. Failure to observe and remove the coverings before flight may cause large errors in airspeed-sensing and altitude-sensing signals, leading to loss of safe flight.",
+      "source_document": "3761047-9e1f89324ac7ad383fce29136ec25754.pdf",
+      "page_number": 19,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Combines the ground-visibility requirement and the flight-deck tag requirement from p.19."
+    },
+
+    {
+      "id": "M10",
+      "question": "How does a resistojet improve upon a conventional cold-gas or hydrazine monopropellant rocket, and by approximately how much does it boost specific impulse?",
+      "correct_answer": "A resistojet transfers energy to the propellant by convection, heating it and increasing its temperature before it expands through the nozzle — in effect creating a hot-gas rocket with increased specific impulse. When applied to conventional hydrazine monopropellant rockets, resistojets boost the specific impulse by about 50%.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 27,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Requires combining the operating principle and the 50% Isp improvement figure."
+    },
+
+    {
+      "id": "M11",
+      "question": "What are the key advantages and disadvantages of solid rockets compared to liquid bipropellant rockets?",
+      "correct_answer": "Advantages of solid rockets: simple and reliable, no propellant management needed, high density specific impulse (Idsp) compared to bipropellant systems, and no combustion chamber cooling issues. Disadvantages: susceptible to cracks in the grain, cannot be restarted once ignited, difficult to stop, and have moderate specific impulse relative to liquid systems.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 24,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "From Table 4.2.1-4 Solid Rockets. A direct comparison requires reading both the solid and bipropellant tables."
+    },
+
+    {
+      "id": "M12",
+      "question": "According to the NASA SE Handbook, why should the SEMP be developed before attempting to prepare an initial cost estimate?",
+      "correct_answer": "The SEMP should be developed before preparing an initial cost estimate because activities that incur cost, such as technical risk activities, should first be captured in the SEMP. Without the SEMP, cost estimates may miss or misrepresent the scope of technical work required.",
+      "source_document": "nasa_systems_engineering_handbook_0.pdf",
+      "page_number": 133,
+      "question_type": "multi_step",
+      "difficulty": "hard",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Stated in the crosscutting technical management section."
+    },
+
+    {
+      "id": "M13",
+      "question": "What is the Space Shuttle's main engine thrust-vector control range, and what method did the earlier V-2 rocket use instead?",
+      "correct_answer": "The Space Shuttle can vary the thrust direction for each main engine by ±10 degrees using mechanical gears and hydraulic actuators. The V-2 rocket used a simpler method: large, movable ablative vanes placed directly into the exhaust stream to change the vehicle's direction.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 40,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Both facts are on the same page, requiring the reader to connect the two systems."
+    },
+
+    {
+      "id": "M14",
+      "question": "What advantage does the aerospike nozzle offer over a conventional bell-shaped nozzle for launch vehicles?",
+      "correct_answer": "Unlike conventional bell nozzles, where all exhaust-gas expansion takes place inside the nozzle, the aerospike allows expansion on the outside. This makes it more versatile across different altitudes and atmospheric pressures, potentially solving the nozzle design problem where a nozzle optimized for one altitude (e.g., sea level) is suboptimal at others (e.g., high altitude). The aerospike was the focus of large-scale development for NASA's X-33 program.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 41,
+      "question_type": "multi_step",
+      "difficulty": "hard",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Requires connecting the nozzle expansion discussion with the aerospike solution."
+    },
+
+    {
+      "id": "M15",
+      "question": "What is the entrance and success criteria source for the Operational Readiness Review (ORR), and where are they defined?",
+      "correct_answer": "The entrance and success criteria for the ORR are defined in Table G-12 of NPR 7123.1.",
+      "source_document": "nasa_systems_engineering_handbook_0.pdf",
+      "page_number": 173,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Small but specific fact in the ORR row of Table 6.7-1."
+    },
+
+    {
+      "id": "M16",
+      "question": "How does staging allow a launch vehicle to increase the payload mass delivered to orbit?",
+      "correct_answer": "Staging works by discarding the structural mass of early stages once their propellant is expended. This means the upper stages do not have to carry the dead weight of empty tanks and engines from lower stages. As a result, the remaining stages operate with better mass ratios, delivering more velocity change (ΔV) for the same amount of propellant. The net effect is that more payload mass can be delivered to orbit compared to a single-stage vehicle of the same total size.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 43,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Requires connecting the staging explanation (p.43), the rocket equation (p.7), and the numeric example (p.44)."
+    },
+
+    {
+      "id": "M17",
+      "question": "In the Boeing 727 mooring procedure, what alternative attachment steps must be followed when no nose mooring fitting is available?",
+      "correct_answer": "When no nose mooring fitting is available, two hubcap bolts must be removed from the nose gear wheel hub. The removed bolts must be directly opposite each other. Provisions for storing the removed hubcap bolts are located in the nose mooring fitting tie bar.",
+      "source_document": "3761047-9e1f89324ac7ad383fce29136ec25754.pdf",
+      "page_number": 23,
+      "question_type": "multi_step",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Multi-step procedure requiring the full sub-procedure on p.23."
+    },
+
+    {
+      "id": "M18",
+      "question": "What does the NASA SE Handbook say about tailoring NPR 7123.1 requirements for a program or project, and where is the outcome captured?",
+      "correct_answer": "Tailoring of NPR 7123.1 requirements is appropriate based on the type, size, and complexity of the project. The result of tailoring — whether for a Center or a program/project — must be captured in the next revision of the SEMP along with supporting rationale and documented approvals from the requirement owner. If an independent assessment is being conducted, tailoring also allows appropriate modification of expectations and assessment criteria.",
+      "source_document": "nasa_systems_engineering_handbook_0.pdf",
+      "page_number": 51,
+      "question_type": "multi_step",
+      "difficulty": "hard",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Requires combining the tailoring guidance (pp.34, 51) to give a complete answer."
+    },
+
+    {
+      "id": "O01",
+      "question": "What is the minimum yield strength for ASTM A36 structural steel?",
+      "correct_answer": "This information is not available in the corpus. ASTM A36 material properties are not covered in any of the ingested documents.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "medium",
+      "expected_confidence_tier": "LOW",
+      "notes": "Classic adversarial factual question. Sounds engineering-domain appropriate but no materials standards documents are in the corpus."
+    },
+
+    {
+      "id": "O02",
+      "question": "What is the specific fuel consumption of a Boeing 737 MAX CFM LEAP-1B engine?",
+      "correct_answer": "This information is not available in the corpus. The only Boeing maintenance document in the corpus covers Boeing 727 parking and mooring procedures; it contains no engine performance specifications and does not cover the 737 MAX.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "medium",
+      "expected_confidence_tier": "LOW",
+      "notes": "Adversarial: similar aircraft brand, but wrong model and wrong topic. Tests whether the system confuses the Boeing 727 maintenance manual with 737 engine specs."
+    },
+
+    {
+      "id": "O03",
+      "question": "How does the TCP/IP network protocol stack handle packet fragmentation?",
+      "correct_answer": "This information is not available in the corpus. No networking or computer science documents are in the corpus.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "easy",
+      "expected_confidence_tier": "LOW",
+      "notes": "Completely off-topic. Should be a clear LOW with no hallucination risk."
+    },
+
+    {
+      "id": "O04",
+      "question": "What are the daily caloric requirements for astronauts on long-duration International Space Station missions?",
+      "correct_answer": "This information is not available in the corpus. Astronaut nutrition and life support requirements are not covered in any of the ingested documents.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "easy",
+      "expected_confidence_tier": "LOW",
+      "notes": "Space-adjacent topic that is clearly absent from the corpus."
+    },
+
+    {
+      "id": "O05",
+      "question": "What is the current price per kilogram to low Earth orbit for the SpaceX Falcon 9 launch vehicle?",
+      "correct_answer": "This information is not available in the corpus. No current launch pricing data is included in the ingested documents.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "easy",
+      "expected_confidence_tier": "LOW",
+      "notes": "Tests that the system does not confuse general Rockets doc content with real-world pricing data."
+    },
+
+    {
+      "id": "O06",
+      "question": "What are OSHA's safety requirements for handling cryogenic liquid oxygen propellant?",
+      "correct_answer": "This information is not available in the corpus. No OSHA regulatory documents are in the corpus. While cryogenic propellants are mentioned in the Rockets textbook, no OSHA safety standards are provided.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "medium",
+      "expected_confidence_tier": "LOW",
+      "notes": "Tests partial-topic overlap: LOX is mentioned in the corpus but OSHA requirements are not."
+    },
+
+    {
+      "id": "O07",
+      "question": "What is the orbital period of a satellite in geostationary orbit?",
+      "correct_answer": "This information is not available in the corpus. No orbital mechanics formulas or geostationary orbit parameters are covered in any of the ingested documents.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "medium",
+      "expected_confidence_tier": "LOW",
+      "notes": "Space topic that is plausibly adjacent to the corpus but absent. The answer (24 hours / 86,400 s) is a well-known fact a model might hallucinate."
+    },
+
+    {
+      "id": "O08",
+      "question": "What is the maximum takeoff weight of the Boeing 727-200?",
+      "correct_answer": "This information is not available in the corpus. The Boeing 727 maintenance manual in the corpus covers only parking and mooring maintenance procedures and contains no aircraft performance specifications.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "medium",
+      "expected_confidence_tier": "LOW",
+      "notes": "High adversarial risk: the Boeing 727 IS in the corpus but this specific data is not. Tests grounding on a document that exists but lacks the queried information."
+    },
+
+    {
+      "id": "O09",
+      "question": "What programming language is used to implement NASA flight software for the Space Shuttle Main Engine Controller?",
+      "correct_answer": "This information is not available in the corpus. Software implementation details for NASA systems are not covered in the ingested documents.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "easy",
+      "expected_confidence_tier": "LOW",
+      "notes": "NASA is in the corpus but software implementation is not mentioned."
+    },
+
+    {
+      "id": "O10",
+      "question": "How does a turbojet engine differ from a turbofan engine in terms of bypass ratio and fuel efficiency?",
+      "correct_answer": "This information is not available in the corpus. The corpus covers rocket propulsion and systems engineering only; jet engine cycle analysis is not included.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "easy",
+      "expected_confidence_tier": "LOW",
+      "notes": "Aerospace-adjacent but clearly out of scope."
+    },
+
+    {
+      "id": "O11",
+      "question": "What is the melting point of Inconel 718, and why is it used in liquid rocket engine turbopump components?",
+      "correct_answer": "This information is not available in the corpus. While turbopumps are mentioned in the Rockets textbook, no material properties for Inconel or any other alloy are covered.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "medium",
+      "expected_confidence_tier": "LOW",
+      "notes": "Turbopumps appear in the corpus; Inconel material properties do not. Tests partial-topic grounding."
+    },
+
+    {
+      "id": "O12",
+      "question": "What FAA certification requirements must a pilot meet to serve as Pilot-in-Command of a Boeing 727?",
+      "correct_answer": "This information is not available in the corpus. The Boeing 727 document is a maintenance manual covering parking and mooring procedures only; it contains no information about pilot certification requirements.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "out_of_scope",
+      "difficulty": "easy",
+      "expected_confidence_tier": "LOW",
+      "notes": "Boeing 727 is in the corpus but pilot certification content is not."
+    },
+
+    {
+      "id": "E01",
+      "question": "What is the specific impulse of a rocket?",
+      "correct_answer": "The corpus defines specific impulse (Isp) as a measure of rocket efficiency: the thrust produced per unit weight flow rate of propellant, expressed in seconds. The formula is Isp = F_thrust / (mdot × g0). However, the specific value of Isp depends entirely on the rocket type — values in the corpus range from 65 s (cold-gas N2 example) to 2000–10,000 s (ion thrusters). The question cannot be answered with a single number without knowing which rocket is being asked about.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 6,
+      "question_type": "edge_case",
+      "difficulty": "easy",
+      "expected_confidence_tier": "MEDIUM",
+      "notes": "Ambiguous question — the corpus contains both the definition and multiple different Isp values depending on rocket type. A good system should give the definition and note the ambiguity rather than hallucinating a single number."
+    },
+
+    {
+      "id": "E02",
+      "question": "How should M10 bolts be installed in structural applications?",
+      "correct_answer": "This information is not available in the corpus. No fastener installation standards, bolt specifications, or structural joining procedures are covered in any of the ingested documents.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "edge_case",
+      "difficulty": "medium",
+      "expected_confidence_tier": "LOW",
+      "notes": "Classic adversarial question that sounds like it could be in an engineering document. The system should get LOW confidence, not fabricate torque specs. High hallucination risk — a capable LLM may generate plausible-sounding torque values from training data."
+    },
+
+    {
+      "id": "E03",
+      "question": "Which has better performance for in-space maneuvering — a chemical bipropellant thruster or an ion thruster?",
+      "correct_answer": "The answer depends on the mission context. Ion thrusters have far superior specific impulse (2,000–10,000 s vs. a few hundred seconds for bipropellants), meaning they are much more propellant-efficient for the same ΔV. However, ion thrusters produce very low thrust (0.1–1.0 N), making them unsuitable for rapid orbital maneuvers. Chemical bipropellant thrusters produce much higher thrust and are better for time-critical maneuvers. The corpus does not specify a single winner but provides data to compare the trade-off.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 31,
+      "question_type": "edge_case",
+      "difficulty": "hard",
+      "expected_confidence_tier": "MEDIUM",
+      "notes": "Both propulsion types are in the corpus. The question has no single correct answer — it requires a trade-off discussion. Tests whether the system can express appropriate uncertainty rather than declaring a winner."
+    },
+
+    {
+      "id": "E04",
+      "question": "Can the Boeing 727 parking brake be used for parking the aircraft instead of chocks?",
+      "correct_answer": "No. The Boeing 727 maintenance manual states that for normal short-period parking, chocks must be placed in front of and behind at least one main gear wheel per gear, and the parking brakes must be OFF. The parking brake is used only to hold the airplane temporarily until chocks are in place — it is not a substitute for chocks.",
+      "source_document": "3761047-9e1f89324ac7ad383fce29136ec25754.pdf",
+      "page_number": 2,
+      "question_type": "edge_case",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "The answer requires careful reading: the manual explicitly states 'parking brakes off' for normal parking. A system that skims the text might incorrectly associate the parking brake with parking."
+    },
+
+    {
+      "id": "E05",
+      "question": "What does NASA SP-2016-6105 say about agile software development practices?",
+      "correct_answer": "The NASA Systems Engineering Handbook (SP-2016-6105) does not address agile software development practices. The handbook covers traditional systems engineering processes, life cycle phases, and reviews. Agile methodologies are not mentioned in the ingested version of the document.",
+      "source_document": null,
+      "page_number": null,
+      "question_type": "edge_case",
+      "difficulty": "medium",
+      "expected_confidence_tier": "LOW",
+      "notes": "The document IS in the corpus but the topic is not covered. This is a critical test case: the system must score LOW even though the document exists in the vector store. Grounding should detect zero entailment for agile content."
+    },
+
+    {
+      "id": "E06",
+      "question": "What is the tau factor, and what does it represent in the context of the Rockets and Launch Vehicles textbook?",
+      "correct_answer": "The tau factor (τ) is defined in the textbook as the ratio of time measured onboard a speeding starship to time measured on Earth, given by τ = sqrt(1 - V²/c²), where V is the starship's velocity and c is the speed of light (300,000 km/s). It represents relativistic time dilation: as a spacecraft's velocity approaches the speed of light, τ gets very small, meaning time on the ship passes much more slowly than on Earth.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 36,
+      "question_type": "edge_case",
+      "difficulty": "hard",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Obscure content from the exotic propulsion / interstellar travel section. Tests retrieval of low-frequency content. A well-functioning system should still find this and score HIGH."
+    },
+
+    {
+      "id": "E07",
+      "question": "Which produces more thrust — an ion thruster or a Hall-effect thruster?",
+      "correct_answer": "According to Table 4.2.1-10 in the textbook, both ion thrusters and Hall-effect thrusters produce thrust in the same range of approximately 0.1 to 1.0 Newtons. The corpus does not indicate a clear winner between the two types in terms of maximum thrust.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 31,
+      "question_type": "edge_case",
+      "difficulty": "medium",
+      "expected_confidence_tier": "MEDIUM",
+      "notes": "Both values are in the same table. The honest answer is that they are in the same range. Tests whether the system fabricates a ranking or correctly reports that the corpus shows equivalent values."
+    },
+
+    {
+      "id": "E08",
+      "question": "According to the NASA SE Handbook, what is a system?",
+      "correct_answer": "The NASA Systems Engineering Handbook describes a system as a combination of elements that function together to produce the capability required to meet a need. The elements include all hardware, software, equipment, facilities, personnel, processes, and procedures needed.",
+      "source_document": "nasa_systems_engineering_handbook_0.pdf",
+      "page_number": 12,
+      "question_type": "edge_case",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "Very broad question that has a specific answer in the corpus. Tests whether broad questions still get HIGH confidence when the corpus has a clear definition."
+    },
+
+    {
+      "id": "E09",
+      "question": "What would happen to launch vehicle performance if a 5th or 6th staging stage were added?",
+      "correct_answer": "The corpus states that each added stage beyond the third or fourth enhances performance less than the previous one, due to the law of diminishing returns. By the fourth or fifth stage, the increased complexity and reduced reliability offset the small performance gain. The corpus does not quantify the exact performance for a 6th stage specifically, but it is clear that the gains would be negligible and the reliability penalties would dominate.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 45,
+      "question_type": "edge_case",
+      "difficulty": "medium",
+      "expected_confidence_tier": "MEDIUM",
+      "notes": "The corpus answers the 4th-5th stage case explicitly but not the 6th stage. Tests whether the system correctly extrapolates from what is stated vs. fabricates specific data."
+    },
+
+    {
+      "id": "E10",
+      "question": "Is nitrogen or helium a better propellant for cold-gas thrusters?",
+      "correct_answer": "The corpus lists both helium and nitrogen as typical cold-gas propellants (along with CO2 and virtually any compressed gas), but does not rank or compare them directly. No performance data specific to helium vs. nitrogen (such as their respective specific impulse values) is provided in the ingested documents.",
+      "source_document": "III.4.2.1_Rockets_and_Launch_Vehicles.pdf",
+      "page_number": 12,
+      "question_type": "edge_case",
+      "difficulty": "medium",
+      "expected_confidence_tier": "LOW",
+      "notes": "Both propellants are listed in the corpus but no comparison is made. A grounded system should say the corpus does not answer this comparison. High hallucination risk: LLMs may generate plausible performance comparisons from training data."
+    },
+
+    {
+      "id": "E11",
+      "question": "What is the purpose of the Preliminary Design Review (PDR) in NASA's project life cycle?",
+      "correct_answer": "The PDR (Preliminary Design Review) establishes the Allocated Baseline and demonstrates that the design approach will meet all system requirements within acceptable risk. It is a mandatory milestone in the systems engineering lifecycle. The PDR concludes Phase B.",
+      "source_document": "nasa_systems_engineering_handbook_0.pdf",
+      "page_number": 36,
+      "question_type": "edge_case",
+      "difficulty": "easy",
+      "expected_confidence_tier": "HIGH",
+      "notes": "This question appears verbatim in the demo pipeline prompt. It should score HIGH to validate end-to-end calibration. If it scores LOW, there is a retrieval problem."
+    },
+
+    {
+      "id": "E12",
+      "question": "Does the Boeing 727 maintenance manual require a static ground when pressure refueling the aircraft?",
+      "correct_answer": "No. The Boeing 727 maintenance manual explicitly states that a static ground on the airplane is not necessary when pressure refueling. However, an electrical bond between the airplane and the refueling vehicle is recommended. A static ground is required when fueling over the wing and when performing maintenance procedures involving devices powered from external grounded electrical sources.",
+      "source_document": "3761047-9e1f89324ac7ad383fce29136ec25754.pdf",
+      "page_number": 3,
+      "question_type": "edge_case",
+      "difficulty": "medium",
+      "expected_confidence_tier": "HIGH",
+      "notes": "The answer is a negation ('not necessary') which is easy for a model to miss or invert. Tests whether the system correctly handles negative conditions. The document also distinguishes pressure refuel vs. over-wing fueling, adding nuance."
+    }
+
+  ]
+}

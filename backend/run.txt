@@ -1,0 +1,19 @@
+# Create the virtual environment
+python -m venv venv
+
+# Activate it (Windows)
+.\venv\Scripts\activate
+
+# Upgrade pip first
+python -m pip install --upgrade pip
+
+# Install requirements
+pip install -r requirements.txt
+
+# Run
+python main.py
+
+# Setting up database
+1. Get a postgreSQL local server and set it up.
+2. Create an .env with the necessary db info
+3. Run init_db.py

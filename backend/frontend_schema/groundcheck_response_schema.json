@@ -1,0 +1,271 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://groundcheck.vt.edu/schemas/v1/response.schema.json",
+  "title": "GroundCheckResponse",
+  "description": "GroundCheck API response schema v1.0.0. Encapsulates the LLM answer, two-signal confidence scoring (NLI grounding + token-probability generation confidence), citation traceability, processing metadata, and error information. Tier thresholds match confidence/config.py: HIGH>=70, MEDIUM>=40, LOW<40.",
+  "version": "1.0.0",
+  "type": "object",
+  "required": ["query_id", "query", "answer", "confidence", "citations", "metadata", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "query_id": {
+      "type": "string",
+      "description": "Unique identifier for this query. Format: q_YYYYMMDD_HHMMSS_<6-char hex>. Used for logging, audit trail, and client-side deduplication.",
+      "pattern": "^q_\\d{8}_\\d{6}_[a-z0-9]{6}$",
+      "examples": ["q_20260315_143210_abc123"]
+    },
+    "query": {
+      "type": "string",
+      "description": "The original user query string, reproduced verbatim.",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "answer": {
+      "type": ["string", "null"],
+      "description": "The LLM-generated answer to the query. Null when no answer could be produced (status=error).",
+      "maxLength": 32768
+    },
+    "confidence": {
+      "$ref": "#/definitions/ConfidenceData"
+    },
+    "citations": {
+      "type": "array",
+      "description": "Ordered list of source document chunks supporting the answer. Empty array when no documents were retrieved.",
+      "items": {
+        "$ref": "#/definitions/CitationModel"
+      },
+      "maxItems": 20
+    },
+    "metadata": {
+      "$ref": "#/definitions/ResponseMetadata"
+    },
+    "error": {
+      "$ref": "#/definitions/ErrorInfo",
+      "description": "Present only when status is 'error' or 'partial_success'. Omitted on full success."
+    },
+    "status": {
+      "type": "string",
+      "description": "'success': both signals available. 'partial_success': answer generated but one signal failed (degraded confidence). 'error': no answer produced.",
+      "enum": ["success", "partial_success", "error"]
+    }
+  },
+  "definitions": {
+    "ConfidenceData": {
+      "type": "object",
+      "description": "Fused confidence result. Combines grounding_score (NLI document support, weight 0.70) and generation_confidence (mean token probability, weight 0.30) into final_score using confidence/fusion.py.",
+      "required": ["final_score", "tier", "signals", "explanation", "degraded"],
+      "additionalProperties": false,
+      "properties": {
+        "final_score": {
+          "type": "integer",
+          "description": "Fused confidence score 0–100. Formula: round((grounding*0.7 + gen_conf*0.3) * 100). Falls back to single signal in degraded mode.",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "tier": {
+          "type": "string",
+          "description": "Tier derived from final_score using thresholds in confidence/config.py. HIGH>=70, MEDIUM>=40, LOW<40.",
+          "enum": ["HIGH", "MEDIUM", "LOW"]
+        },
+        "signals": {
+          "$ref": "#/definitions/ConfidenceSignals"
+        },
+        "weights": {
+          "$ref": "#/definitions/FusionWeights",
+          "description": "Weights applied during fusion. Present when at least one signal is available. Default: grounding=0.7, generation=0.3. Adjusted to 1.0/0.0 in degraded mode."
+        },
+        "explanation": {
+          "type": "string",
+          "description": "Human-readable explanation of the confidence score, which signals were used, and any degradation.",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "warnings": {
+          "type": ["array", "null"],
+          "description": "Non-fatal issues during confidence computation. Present only when status=partial_success.",
+          "items": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "degraded": {
+          "type": "boolean",
+          "description": "True when one or both signals were unavailable. Mirrors FusionResult.degraded from confidence/fusion.py."
+        }
+      }
+    },
+    "ConfidenceSignals": {
+      "type": "object",
+      "description": "The two raw confidence signals before fusion.",
+      "required": ["grounding_score", "generation_confidence"],
+      "additionalProperties": false,
+      "properties": {
+        "grounding_score": {
+          "type": ["number", "null"],
+          "description": "Float 0–1. NLI entailment score from DeBERTa-v3-small measuring how well the answer is supported by retrieved chunks. Formula: mean(max_j(entailment(claim_i, chunk_j))). Null if grounding scorer failed.",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "generation_confidence": {
+          "type": ["number", "null"],
+          "description": "Float 0–1. Normalized mean token log-probability from the LLM. Formula: clip((raw_mean - 0.3) / 0.6, 0, 1). Null when logprobs are unavailable.",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    },
+    "FusionWeights": {
+      "type": "object",
+      "description": "Weights applied to each signal during fusion. Always sum to 1.0. From confidence/config.py: WEIGHT_GROUNDING=0.70, WEIGHT_GEN_CONF=0.30.",
+      "required": ["grounding", "generation"],
+      "additionalProperties": false,
+      "properties": {
+        "grounding": {
+          "type": "number",
+          "description": "Weight applied to grounding_score. Default 0.7. Set to 1.0 when generation_confidence is unavailable.",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "generation": {
+          "type": "number",
+          "description": "Weight applied to generation_confidence. Default 0.3. Set to 0.0 when generation_confidence is unavailable.",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    },
+    "CitationModel": {
+      "type": "object",
+      "description": "A single retrieved document chunk supporting the answer. Built from retrieval.Citation.to_dict() enriched with NLI entailment scores from grounding_scorer.claim_details.",
+      "required": ["citation_id", "document", "chunk_id", "similarity_score", "text_excerpt"],
+      "additionalProperties": false,
+      "properties": {
+        "citation_id": {
+          "type": "string",
+          "description": "Stable ID built from source filename + chunk_index. Format: <source_slug>__chunk_<N>.",
+          "examples": ["nasa_handbook_pdf__chunk_3"]
+        },
+        "document": {
+          "type": "string",
+          "description": "Source document filename (e.g. 'Materials_Handbook.pdf').",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "page": {
+          "type": ["integer", "null"],
+          "description": "1-indexed page number within the source document. Null for non-paginated documents.",
+          "minimum": 1
+        },
+        "section": {
+          "type": ["string", "null"],
+          "description": "Section heading within the document. Null if not available.",
+          "maxLength": 512
+        },
+        "chunk_id": {
+          "type": "string",
+          "description": "Internal ChromaDB chunk identifier. Format: <source>__chunk_<chunk_index>.",
+          "examples": ["nasa_handbook.pdf__chunk_3"]
+        },
+        "similarity_score": {
+          "type": "number",
+          "description": "Cosine similarity between query embedding and chunk embedding (0–1). Converted from ChromaDB cosine distance: similarity = 1 - distance.",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "entailment_score": {
+          "type": ["number", "null"],
+          "description": "NLI entailment probability (0–1) from DeBERTa grounding scorer. Best entailment score across all claims for this chunk. Null if grounding scorer was not run.",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "text_excerpt": {
+          "type": "string",
+          "description": "Chunk text preview truncated to ~300 characters for UI display.",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      }
+    },
+    "ResponseMetadata": {
+      "type": "object",
+      "description": "Processing metadata for observability, debugging, and audit trail.",
+      "required": ["model", "timestamp", "processing_time_ms"],
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "LLM identifier used for answer generation.",
+          "minLength": 1,
+          "maxLength": 128,
+          "examples": ["mistralai/Mistral-7B-Instruct-v0.2", "mistral-small-24b"]
+        },
+        "nli_model": {
+          "type": ["string", "null"],
+          "description": "NLI model used for grounding scoring. Null if grounding scorer was not run.",
+          "maxLength": 128,
+          "examples": ["cross-encoder/nli-deberta-v3-small"]
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "ISO 8601 UTC timestamp of when the response was generated.",
+          "format": "date-time",
+          "examples": ["2026-03-15T14:32:10Z"]
+        },
+        "processing_time_ms": {
+          "type": "integer",
+          "description": "Total wall-clock time in milliseconds from request receipt to response serialization.",
+          "minimum": 0
+        },
+        "retrieved_chunks": {
+          "type": ["integer", "null"],
+          "description": "Number of document chunks retrieved from ChromaDB before filtering.",
+          "minimum": 0
+        },
+        "schema_version": {
+          "type": "string",
+          "description": "Version of this response schema for client compatibility checks.",
+          "default": "1.0.0",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        }
+      }
+    },
+    "ErrorInfo": {
+      "type": "object",
+      "description": "Structured error payload. Present when status is 'error' or 'partial_success'.",
+      "required": ["code", "message", "severity"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Machine-readable error code for programmatic client handling.",
+          "enum": [
+            "NO_RELEVANT_DOCUMENTS",
+            "RETRIEVAL_FAILURE",
+            "GENERATION_FAILURE",
+            "NLI_FAILURE",
+            "GENERATION_CONFIDENCE_UNAVAILABLE",
+            "TIMEOUT",
+            "INVALID_QUERY",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable error message for display or logging.",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "severity": {
+          "type": "string",
+          "description": "'warning' = non-fatal, partial result available. 'error' = fatal, no answer produced.",
+          "enum": ["warning", "error"]
+        },
+        "details": {
+          "type": ["string", "null"],
+          "description": "Technical detail for debugging. Not intended for end-user display.",
+          "maxLength": 4096
+        }
+      }
+    }
+  }
+}
