@@ -1,7 +1,8 @@
 # ---------------------------------------------------------------------------
 # Ollama (local dev only)
 # ---------------------------------------------------------------------------
-OLLAMA_BASE_URL = "http://localhost:11434"
+import os
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL    = "mistral:7b-instruct"   # ~4.1 GB VRAM on RTX 3060 Ti
 OLLAMA_TIMEOUT  = 120                     # seconds
 OLLAMA_OPTIONS  = {

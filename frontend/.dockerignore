@@ -1,0 +1,24 @@
+# Build output — produced inside the container, not needed as input
+dist/
+node_modules/
+
+# Environment files — secrets must not be baked into the image
+.env
+.env.local
+.env.*.local
+
+# Dev / editor
+.vscode/
+.idea/
+*.swp
+
+# Git
+.git/
+.gitignore
+
+# Docs
+*.md
+
+# OS
+.DS_Store
+Thumbs.db

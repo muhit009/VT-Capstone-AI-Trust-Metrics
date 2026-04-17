@@ -1,0 +1,21 @@
+# Ignore everything by default — each service builds from its own context
+# (./backend or ./frontend), so this root-level .dockerignore is mainly
+# a safety net if someone runs `docker build .` from the repo root.
+
+.git/
+.gitignore
+*.md
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Service-specific build artifacts
+backend/__pycache__/
+backend/venv/
+backend/.venv/
+backend/chroma_db/
+backend/uploads/
+backend/calibration_outputs/
+frontend/node_modules/
+frontend/dist/

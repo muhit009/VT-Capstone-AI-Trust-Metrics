@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Tests
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Development / editor
+.env
+*.env
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Docs (not needed in image)
+*.md
+PIPELINE_DOCS.md
+CONFIDENCE_ENGINE.md
+RAG_SETUP.md
+
+# Runtime data — provided via volumes at runtime, not baked in
+chroma_db/
+uploads/
+calibration_outputs/
+
+# Ollama local files
+ollama/
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db
+run.txt
+bugfix_notes.md
+set
