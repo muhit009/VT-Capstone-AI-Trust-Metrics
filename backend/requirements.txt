@@ -8,6 +8,7 @@ pydantic
 sqlalchemy
 python-dotenv
 psycopg2-binary
+socket
 
 # LLM clients + Utils + Testing
 requests
