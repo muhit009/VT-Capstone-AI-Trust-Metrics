@@ -229,14 +229,8 @@ pip install -r requirements.txt
 
 Create a `.env` file in `backend/`:
 
-```env
-DB_IP=db.xxxxxxxxxxxx.supabase.co
-DB_PORT=5432
-DB_NAME=postgres
-DB_USER=postgres
-DB_PASS=your-supabase-password
-PIPELINE=ollama   # or "vllm" for HPC
-```
+1. Fill in the `.env.example`:
+2. cp .env.example .env
 
 ### 3. Initialize the database
 
