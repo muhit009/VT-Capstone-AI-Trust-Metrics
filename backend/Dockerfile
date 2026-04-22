@@ -29,11 +29,6 @@ RUN python -c "import nltk; nltk.download('punkt'); nltk.download('punkt_tab')"
 # Application code
 COPY . .
 
-# Non-root user for security
-RUN useradd -m -u 1000 appuser \
-    && chown -R appuser:appuser /app
-USER appuser
-
 EXPOSE 8000
 
 # Healthcheck — polls /v1/health every 30 s; 3 failures → unhealthy

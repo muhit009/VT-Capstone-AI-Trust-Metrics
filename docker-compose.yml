@@ -23,17 +23,23 @@ services:
       # When PIPELINE=ollama this points to the ollama service.
       # Override with OLLAMA_BASE_URL=http://host-ip:11434 to use host Ollama.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-300}
       # ── ChromaDB & uploads ── (paths are inside the container)
       CHROMA_PERSIST_PATH: /app/chroma_db
       UPLOAD_DIR: /app/uploads
     volumes:
-      # Persist ChromaDB embeddings and uploaded documents across restarts
-      - chroma-data:/app/chroma_db
-      - uploads-data:/app/uploads
+      # Bind mounts — use the existing local ChromaDB and uploads directly
+      # so the container sees the already-ingested documents without re-ingestion.
+      - ./backend/chroma_db:/app/chroma_db
+      - ./backend/uploads:/app/uploads
       # Cache HuggingFace model weights (sentence-transformers, NLI model)
       # so they are not re-downloaded on every container start.
       - model-cache:/root/.cache/huggingface
       - nltk-data:/root/nltk_data
+    # Force IPv4-only DNS resolution so psycopg2 doesn't try the IPv6
+    # address returned by Supabase's DNS (unreachable inside Docker on Windows).
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: 1
     networks:
       - groundcheck-net
     depends_on:

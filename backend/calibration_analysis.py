@@ -849,9 +849,15 @@ class CalibrationRunner:
         ]
 
         text = "\n".join(lines)
-        print(text)
+        # Windows consoles default to cp1252; encode to UTF-8 bytes so that
+        # ✓/✗ characters don't cause a UnicodeEncodeError.
+        try:
+            print(text)
+        except UnicodeEncodeError:
+            sys.stdout.buffer.write(text.encode("utf-8", errors="replace") + b"\n")
+            sys.stdout.buffer.flush()
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(text)
         logger.info("Summary saved → %s", path)
 

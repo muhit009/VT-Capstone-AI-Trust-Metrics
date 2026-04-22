@@ -4,7 +4,7 @@
 import os
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL    = "mistral:7b-instruct"   # ~4.1 GB VRAM on RTX 3060 Ti
-OLLAMA_TIMEOUT  = 120                     # seconds
+OLLAMA_TIMEOUT  = int(os.getenv("OLLAMA_TIMEOUT", "300"))   # seconds (env-configurable)
 OLLAMA_OPTIONS  = {
     "temperature": 0,   # deterministic — required for audit trail
     "seed": 42,
