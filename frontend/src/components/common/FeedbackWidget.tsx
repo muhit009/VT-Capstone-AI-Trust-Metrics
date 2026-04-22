@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { feedbackService } from '../../services/api';
-import type { FeedbackRating } from '../../services/api';
 
 interface FeedbackWidgetProps {
   queryId: string;
@@ -11,7 +10,7 @@ type SubmitStatus = 'idle' | 'submitting' | 'submitted' | 'error';
 const STORAGE_KEY_PREFIX = 'feedback_submitted_';
 
 export default function FeedbackWidget({ queryId }: FeedbackWidgetProps) {
-  const [rating, setRating] = useState<FeedbackRating | null>(null);
+  const [rating, setRating] = useState<'helpful' | 'unhelpful' | null>(null);
   const [comment, setComment] = useState('');
   const [status, setStatus] = useState<SubmitStatus>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -34,10 +33,10 @@ export default function FeedbackWidget({ queryId }: FeedbackWidgetProps) {
     setErrorMessage(null);
 
     try {
-      await feedbackService.submit({
-        query_id: queryId,
-        rating,
-        comment: comment.trim() || undefined,
+      await feedbackService.submit(queryId, {
+        status: rating === 'helpful' ? 'accepted' : 'rejected',
+        feedback_rating: rating === 'helpful' ? 1 : -1,
+        feedback_comment: comment.trim() || undefined,
       });
       localStorage.setItem(`${STORAGE_KEY_PREFIX}${queryId}`, '1');
       setAlreadySubmitted(true);

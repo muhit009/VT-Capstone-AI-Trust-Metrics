@@ -25,13 +25,13 @@ function formatLatency(latency) {
   return `${latency} ms`;
 }
 
-function SourcePill({ citation }) {
+function SourcePill({ citation, rank }) {
   return (
     <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700">
-      <span className="font-medium">[{citation.rank}]</span>
-      <span className="max-w-[220px] truncate">{citation.source.document_name}</span>
-      {citation.source.page_number ? (
-        <span className="text-gray-500">p.{citation.source.page_number}</span>
+      <span className="font-medium">[{rank}]</span>
+      <span className="max-w-[220px] truncate">{citation.document}</span>
+      {citation.page ? (
+        <span className="text-gray-500">p.{citation.page}</span>
       ) : null}
     </div>
   );
@@ -57,11 +57,11 @@ function AssistantMessage({ message, onCopy }) {
                   ].join(' ')}
                 >
                   <TierIcon className="h-3.5 w-3.5" />
-                  {response.confidence.score}/100 · {tier}
+                  {response.confidence.final_score}/100 · {tier}
                 </div>
 
                 <div className="text-xs text-gray-500">
-                  Latency: {formatLatency(response.metadata?.latency_ms?.total)}
+                  Latency: {formatLatency(response.metadata?.processing_time_ms)}
                 </div>
 
                 {response.confidence.degraded ? (
@@ -80,9 +80,9 @@ function AssistantMessage({ message, onCopy }) {
 
         {response ? (
           <>
-            {response.confidence.warning ? (
+            {response.confidence.warnings?.[0] ? (
               <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                {response.confidence.warning}
+                {response.confidence.warnings[0]}
               </div>
             ) : null}
 
@@ -92,10 +92,11 @@ function AssistantMessage({ message, onCopy }) {
               </div>
               <div className="flex flex-wrap gap-2">
                 {response.citations?.length ? (
-                  response.citations.map((citation) => (
+                  response.citations.map((citation, index) => (
                     <SourcePill
-                      key={`${response.request_id}-${citation.rank}`}
+                      key={`${response.query_id}-${index}`}
                       citation={citation}
+                      rank={index + 1}
                     />
                   ))
                 ) : (

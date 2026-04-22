@@ -3,18 +3,10 @@ export type {
   Metric,
   ConfidenceSignals,
   ConfidenceData,
-  ClaimSupport,
-  CitationSource,
   CitationModel,
-  LatencyBreakdown,
-  ModelInfo,
-  RetrieverInfo,
   ResponseMetadata,
   ErrorInfo,
   GroundCheckResponse,
-  GroundCheckErrorResponse,
-  RAGInferenceRequest,
-  FeedbackRating,
   FeedbackRequest,
   FeedbackResponse,
 } from '../api/types';
@@ -23,8 +15,6 @@ import { apiClient } from '../api/client';
 import type {
   Metric,
   GroundCheckResponse,
-  RAGInferenceRequest,
-  FeedbackRequest,
   FeedbackResponse,
 } from '../api/types';
 
@@ -37,11 +27,11 @@ export const metricsService = {
 };
 
 export const queryService = {
-  submit: (request: RAGInferenceRequest) =>
-    apiClient.post('/v1/rag/query', request) as Promise<GroundCheckResponse>,
+  submit: (request: { query: string; top_k?: number }) =>
+    apiClient.post('/api/v1/query', request) as Promise<GroundCheckResponse>,
 };
 
 export const feedbackService = {
-  submit: (request: FeedbackRequest) =>
-    apiClient.post('/v1/feedback', request) as Promise<FeedbackResponse>,
+  submit: (queryId: string, payload: { status: string; feedback_rating?: number; feedback_comment?: string }) =>
+    apiClient.post(`/api/v1/feedback/${queryId}`, payload) as Promise<FeedbackResponse>,
 };
