@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 import nltk
 from transformers import pipeline
 
-from .config import NLI_MODEL, TOP_K_CHUNKS, MIN_CLAIM_WORDS
+from ..config import NLI_MODEL, TOP_K_CHUNKS, MIN_CLAIM_WORDS
 
 logger = logging.getLogger(__name__)
 
