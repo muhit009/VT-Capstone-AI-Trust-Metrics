@@ -21,7 +21,7 @@ import time
 import requests
 from typing import TypedDict
 
-from .config import (
+from ..config import (
     VLLM_BASE_URL as _VLLM_BASE_URL,
     VLLM_MODEL,
     VLLM_TIMEOUT,

@@ -22,7 +22,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .config import (
+from ..config import (
     GEN_CONF_RAW_MIN,
     GEN_CONF_RAW_MAX,
     GEN_CONF_HIGHLY_CONFIDENT_THRESHOLD,

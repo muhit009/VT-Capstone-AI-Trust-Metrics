@@ -1,6 +1,41 @@
-
-# ignore these
-venv/
-__pycache__/
+# Secrets 
 .env
-*.pdf
+.env.local
+.env.*.local
+*.secret
+secrets/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+venv/
+.venv/
+
+# Data and model artifacts
+chroma_db/
+uploads/
+*.bin
+*.safetensors
+*.gguf
+*.pt
+*.pth
+
+# IDE / OS
+.vscode/
+.idea/
+*.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Test artifacts
+.coverage
+htmlcov/
