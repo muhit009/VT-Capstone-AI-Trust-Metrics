@@ -102,6 +102,14 @@ class GroundingScorer:
                 num_claims=0,
                 supported_claims=0,
             )
+        
+        if not chunks:
+            logger.warning("No chunks provided to grounding scorer — grounding score = 0.0")
+            return GroundingResult(
+                grounding_score=0.0,
+                num_claims=len(claims),
+                supported_claims=0,
+            )
 
         # Build all (claim, chunk) pairs for batch inference
         pairs   = [(claim, chunk) for claim in claims for chunk in chunks]
