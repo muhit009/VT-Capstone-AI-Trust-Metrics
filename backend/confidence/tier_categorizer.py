@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..config import TIER_HIGH_THRESHOLD, TIER_MEDIUM_THRESHOLD
+from .config import TIER_HIGH_THRESHOLD, TIER_MEDIUM_THRESHOLD
 
 
 # ---------------------------------------------------------------------------

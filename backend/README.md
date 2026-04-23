@@ -16,6 +16,54 @@ GroundCheck is a confidence-scoring engine for RAG-based enterprise AI systems. 
 
 ---
 
+## Setup
+
+### 1. Install dependencies
+
+```bash
+python -m venv venv
+venv\Scripts\activate        # Windows
+# source venv/bin/activate   # macOS/Linux
+pip install -r requirements.txt
+```
+
+### 2. Configure environment
+
+Create a `.env` file in `backend/`:
+
+1. Fill in the `.env.example`:
+2. cp .env.example .env
+
+### 3. Initialize the database
+
+```bash
+python init_db.py
+```
+
+### 4. Start the server
+
+**Local dev (Ollama):**
+```bash
+ollama serve                        # separate terminal
+ollama pull mistral:7b-instruct
+uvicorn main:app --reload --port 8000
+```
+
+**HPC (vLLM):**
+```bash
+export PIPELINE=vllm
+bash vllm_server.sh                 # starts vLLM on the HPC node
+uvicorn main:app --port 8000
+```
+
+### 5. Run tests
+
+```bash
+pytest tests/ -v
+```
+
+---
+
 ## Architecture
 
 ```
@@ -210,54 +258,6 @@ POST /api/v1/feedback/{query_id}  { "status": "accepted", "feedback_rating": 1 }
     │
     └─ logger.log_decision()                       → DB: Decision row
             { status, rationale, feedback_rating, feedback_comment, user_id }
-```
-
----
-
-## Setup
-
-### 1. Install dependencies
-
-```bash
-python -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # macOS/Linux
-pip install -r requirements.txt
-```
-
-### 2. Configure environment
-
-Create a `.env` file in `backend/`:
-
-1. Fill in the `.env.example`:
-2. cp .env.example .env
-
-### 3. Initialize the database
-
-```bash
-python init_db.py
-```
-
-### 4. Start the server
-
-**Local dev (Ollama):**
-```bash
-ollama serve                        # separate terminal
-ollama pull mistral:7b-instruct
-uvicorn main:app --reload --port 8000
-```
-
-**HPC (vLLM):**
-```bash
-export PIPELINE=vllm
-bash vllm_server.sh                 # starts vLLM on the HPC node
-uvicorn main:app --port 8000
-```
-
-### 5. Run tests
-
-```bash
-pytest tests/ -v
 ```
 
 ---

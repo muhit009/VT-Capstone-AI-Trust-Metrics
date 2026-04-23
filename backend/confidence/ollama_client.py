@@ -17,7 +17,7 @@ import math
 import requests
 from typing import TypedDict
 
-from ..config import OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_OPTIONS
+from .config import OLLAMA_BASE_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_OPTIONS
 
 
 class OllamaResult(TypedDict):

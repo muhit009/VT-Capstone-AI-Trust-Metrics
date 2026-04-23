@@ -23,7 +23,7 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-from ..config import (
+from .config import (
     WEIGHT_GROUNDING,
     WEIGHT_GEN_CONF,
 )
