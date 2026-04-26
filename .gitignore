@@ -1,0 +1,30 @@
+# Environment variables — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# ChromaDB — local vector store data
+backend/chroma_db/
+
+# Uploaded documents
+backend/uploads/
+
+# Jupyter / calibration artifacts
+*.ipynb_checkpoints/
+backend/calibration_outputs/
+
+# OS
+.DS_Store
+Thumbs.db
