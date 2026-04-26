@@ -36,10 +36,6 @@ services:
       # so they are not re-downloaded on every container start.
       - model-cache:/root/.cache/huggingface
       - nltk-data:/root/nltk_data
-    # Force IPv4-only DNS resolution so psycopg2 doesn't try the IPv6
-    # address returned by Supabase's DNS (unreachable inside Docker on Windows).
-    sysctls:
-      net.ipv6.conf.all.disable_ipv6: 1
     networks:
       - groundcheck-net
     depends_on:

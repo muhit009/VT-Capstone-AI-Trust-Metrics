@@ -6,21 +6,29 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def _resolve_ipv4(hostname: str) -> str | None:
+def _resolve_host_addr(hostname: str) -> str | None:
     """
-    Resolve a hostname to its first IPv4 address, or return None on failure.
-    Used so that psycopg2's hostaddr= connect arg forces the connection
-    over IPv4 even when DNS returns an IPv6 address first (unreachable
-    inside Docker on Windows).  hostaddr= must be a numeric IP — never a
-    hostname — so we return None rather than the original hostname when
-    resolution fails.
+    Resolve hostname to a numeric IP for psycopg2's hostaddr= parameter.
+    Tries IPv4 first; if the host is IPv6-only (common with Supabase), falls
+    back to the IPv6 address.  hostaddr= must always be a numeric IP.
+    Returns None if resolution fails entirely.
     """
+    # Prefer IPv4 — works everywhere including Docker on Windows
     try:
         results = socket.getaddrinfo(hostname, None, socket.AF_INET)
         if results:
             return results[0][4][0]
     except socket.gaierror:
         pass
+
+    # Fall back to IPv6 — Supabase hostnames are often IPv6-only
+    try:
+        results = socket.getaddrinfo(hostname, None, socket.AF_INET6)
+        if results:
+            return results[0][4][0]   # returns bare IPv6 address e.g. "2600:1f16:..."
+    except socket.gaierror:
+        pass
+
     return None
 
 
@@ -47,7 +55,7 @@ DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
 DB_PASS = os.getenv("DB_PASS")
 
-DB_HOST_IPV4 = _resolve_ipv4(DB_HOST)
+DB_HOST_ADDR = _resolve_host_addr(DB_HOST)
 
 SQLALCHEMY_DATABASE_URL = URL.create(
     drivername="postgresql",
@@ -60,8 +68,8 @@ SQLALCHEMY_DATABASE_URL = URL.create(
 
 _connect_args: dict = {"sslmode": "require"}
 
-if DB_HOST_IPV4:
-    _connect_args["hostaddr"] = DB_HOST_IPV4   # force IPv4 when available
+if DB_HOST_ADDR:
+    _connect_args["hostaddr"] = DB_HOST_ADDR   # numeric IP bypasses runtime DNS lookup
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,

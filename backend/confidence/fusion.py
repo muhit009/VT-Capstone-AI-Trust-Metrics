@@ -67,8 +67,10 @@ def _sanitize(v: float | None) -> float | None:
 
 
 def fuse(
-    grounding_score: float | None,
-    gen_confidence:  float | None,
+    grounding_score:  float | None,
+    gen_confidence:   float | None,
+    weight_grounding: float | None = None,
+    weight_gen_conf:  float | None = None,
 ) -> FusionResult:
     """
     Fuse the two normalized signals into a final score.
@@ -119,13 +121,16 @@ def fuse(
         )
 
     # --- normal fusion ------------------------------------------------------
-    g_contrib = g * WEIGHT_GROUNDING * 100
-    c_contrib = c * WEIGHT_GEN_CONF  * 100
+    w_g = weight_grounding if weight_grounding is not None else WEIGHT_GROUNDING
+    w_c = weight_gen_conf  if weight_gen_conf  is not None else WEIGHT_GEN_CONF
+
+    g_contrib = g * w_g * 100
+    c_contrib = c * w_c * 100
     score     = round(g_contrib + c_contrib)
 
     logger.debug(
-        "Fusion: grounding=%.4f*70=%.2f  gen_conf=%.4f*30=%.2f  score=%d",
-        g, g_contrib, c, c_contrib, score,
+        "Fusion: grounding=%.4f*%.2f=%.2f  gen_conf=%.4f*%.2f=%.2f  score=%d",
+        g, w_g, g_contrib, c, w_c, c_contrib, score,
     )
 
     return FusionResult(

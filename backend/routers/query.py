@@ -40,7 +40,7 @@ from response_models import (
     ErrorCode,
 )
 from confidence.engine import confidence_engine
-from confidence.grounding_scorer import grounding_scorer
+from routers.weights import load_weights
 
 logger = logging.getLogger(__name__)
 
@@ -212,22 +212,16 @@ async def submit_query(
         chunk_texts = [c.text for c in rag_response.citations]
         logprobs    = getattr(model_executor, "_last_logprobs", [])
 
-        # Run grounding scorer separately for citation entailment enrichment
-        grounding_result = None
-        if chunk_texts and rag_response.answer:
-            try:
-                grounding_result = grounding_scorer.compute(
-                    answer=rag_response.answer,
-                    chunks=chunk_texts,
-                )
-            except Exception as exc:
-                logger.warning("Grounding scorer failed during enrichment: %s", exc)
-
+        w_grounding, w_gen = load_weights(db)
         confidence_result = confidence_engine.score(
             answer=rag_response.answer or "",
             chunks=chunk_texts,
             logprobs=logprobs,
+            weight_grounding=w_grounding,
+            weight_gen_conf=w_gen,
         )
+        # grounding_result is reused from the engine — no second NLI pass
+        grounding_result = confidence_result.grounding_result
 
         processing_time_ms = int((time.monotonic() - t_start) * 1000)
 

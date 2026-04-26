@@ -35,3 +35,16 @@ export const feedbackService = {
   submit: (queryId: string, payload: { status: string; feedback_rating?: number; feedback_comment?: string }) =>
     apiClient.post(`/api/v1/feedback/${queryId}`, payload) as Promise<FeedbackResponse>,
 };
+
+export interface WeightResponse {
+  weight_grounding:  number;
+  weight_generation: number;
+  is_default:        boolean;
+  updated_at?:       string | null;
+}
+
+export const weightsService = {
+  get:   ()                                                                => apiClient.get<WeightResponse>('/api/v1/weights'),
+  save:  (weight_grounding: number, weight_generation: number)             => apiClient.put<WeightResponse>('/api/v1/weights', { weight_grounding, weight_generation }),
+  reset: ()                                                                => apiClient.delete<WeightResponse>('/api/v1/weights'),
+};

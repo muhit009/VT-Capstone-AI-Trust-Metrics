@@ -14,10 +14,11 @@ Usage (local dev, via dev/local_pipeline.py):
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, Future
+from dataclasses import dataclass, field
 from typing import Optional
 
-from .grounding_scorer        import grounding_scorer
+from .grounding_scorer        import grounding_scorer, GroundingResult
 from .generation_confidence   import generation_confidence_scorer
 from .fusion                  import fuse
 from .explanation_generator   import generate_explanation
@@ -32,7 +33,8 @@ class ConfidenceResult:
     signals: dict           # raw signal values for audit trail
     degraded: bool
     warning:  Optional[str]
-    explanation: str            # human-readable summary
+    explanation: str                        # human-readable summary
+    grounding_result: Optional[GroundingResult] = field(default=None, repr=False)  # for citation enrichment
 
     def to_dict(self) -> dict:
         return {
@@ -54,9 +56,11 @@ class ConfidenceEngine:
 
     def score(
         self,
-        answer:   str,
-        chunks:   list[str],
-        logprobs: list[float],
+        answer:           str,
+        chunks:           list[str],
+        logprobs:         list[float],
+        weight_grounding: float | None = None,
+        weight_gen_conf:  float | None = None,
     ) -> ConfidenceResult:
         """
         Compute the full confidence score for one RAG inference result.
@@ -74,32 +78,39 @@ class ConfidenceEngine:
         logger.info("Scoring answer (%d chars) against %d chunks with %d logprobs",
                     len(answer), len(chunks), len(logprobs))
 
-        # --- Signal 1: Grounding Score --------------------------------------
+        # --- Signals 1 & 2: run in parallel ---------------------------------
+        # Both scorers are independent — submit them to a thread pool so they
+        # overlap. DeBERTa inference (grounding) dominates; gen confidence
+        # finishes while NLI is still running.
         grounding_result = None
         grounding_score  = None
-        try:
-            grounding_result = grounding_scorer.compute(answer, chunks)
-            grounding_score  = grounding_result.grounding_score
-            logger.info("Grounding score: %.4f (%d/%d claims supported)",
-                        grounding_score,
-                        grounding_result.supported_claims,
-                        grounding_result.num_claims)
-        except Exception as e:
-            logger.error("Grounding scorer failed: %s", e, exc_info=True)
+        gen_result       = None
+        gen_confidence   = None
 
-        # --- Signal 2: Generation Confidence --------------------------------
-        gen_result     = None
-        gen_confidence = None
-        try:
-            gen_result     = generation_confidence_scorer.compute(logprobs)
-            gen_confidence = gen_result.score
-            logger.info("Generation confidence: raw=%.4f normalized=%.4f level=%s",
-                        gen_result.raw_mean_prob, gen_confidence, gen_result.level)
-        except Exception as e:
-            logger.error("Gen confidence scorer failed: %s", e, exc_info=True)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            f_grounding: Future = pool.submit(grounding_scorer.compute, answer, chunks)
+            f_gen:       Future = pool.submit(generation_confidence_scorer.compute, logprobs)
+
+            try:
+                grounding_result = f_grounding.result()
+                grounding_score  = grounding_result.grounding_score
+                logger.info("Grounding score: %.4f (%d/%d claims supported)",
+                            grounding_score,
+                            grounding_result.supported_claims,
+                            grounding_result.num_claims)
+            except Exception as e:
+                logger.error("Grounding scorer failed: %s", e, exc_info=True)
+
+            try:
+                gen_result     = f_gen.result()
+                gen_confidence = gen_result.score
+                logger.info("Generation confidence: raw=%.4f normalized=%.4f level=%s",
+                            gen_result.raw_mean_prob, gen_confidence, gen_result.level)
+            except Exception as e:
+                logger.error("Gen confidence scorer failed: %s", e, exc_info=True)
 
         # --- Fusion ---------------------------------------------------------
-        fusion = fuse(grounding_score, gen_confidence)
+        fusion = fuse(grounding_score, gen_confidence, weight_grounding, weight_gen_conf)
         logger.info("Fusion result: score=%d tier=%s degraded=%s",
                     fusion.score, fusion.tier, fusion.degraded)
 
@@ -134,6 +145,7 @@ class ConfidenceEngine:
             degraded=fusion.degraded,
             warning=fusion.warning,
             explanation=explanation,
+            grounding_result=grounding_result,
         )
 
 

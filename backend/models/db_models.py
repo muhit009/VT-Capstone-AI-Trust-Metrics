@@ -66,9 +66,18 @@ class Decision(Base, TimestampMixin):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     status = Column(String(50)) # e.g., "approved", "flagged"
     rationale = Column(Text)
-    
+
     feedback_rating = Column(Integer)   # 1 = thumbs up, -1 = thumbs down
     feedback_comment = Column(Text)
 
     answer = relationship("Answer", back_populates="decisions")
+
+
+class WeightConfig(Base, TimestampMixin):
+    """Global confidence signal weight configuration (single row, id=1)."""
+    __tablename__ = "weight_configs"
+    id               = Column(Integer, primary_key=True, default=1)
+    weight_grounding = Column(Float, nullable=False)
+    weight_generation = Column(Float, nullable=False)
+    updated_by       = Column(String(128), nullable=True)  # optional audit field
     

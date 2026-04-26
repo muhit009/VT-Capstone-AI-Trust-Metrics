@@ -10,6 +10,7 @@ import {
   Trash2,
   Info,
 } from 'lucide-react';
+import WeightConfiguration from './WeightConfiguration';
 
 const defaultSettings = {
   user: {
@@ -591,7 +592,8 @@ export default function SettingsPanel() {
             </div>
           </SectionCard>
 
-         
+          <WeightConfiguration />
+
         </div>
       </div>
     </div>
