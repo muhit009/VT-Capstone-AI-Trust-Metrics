@@ -28,10 +28,10 @@ export const metricsService = {
 
 export const queryService = {
   submit: (request: { query: string; top_k?: number }) =>
-    apiClient.post('/v1/query', request) as Promise<GroundCheckResponse>,
+    apiClient.post('/api/v1/query', request) as Promise<GroundCheckResponse>,
 };
 
 export const feedbackService = {
   submit: (queryId: string, payload: { status: string; feedback_rating?: number; feedback_comment?: string }) =>
-    apiClient.post(`/v1/feedback/${queryId}`, payload) as Promise<FeedbackResponse>,
+    apiClient.post(`/api/v1/feedback/${queryId}`, payload) as Promise<FeedbackResponse>,
 };

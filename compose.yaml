@@ -1,15 +1,127 @@
 services:
+
+  # ── Backend (FastAPI + RAG + Confidence Engine) ──────────────────────────
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile.backend
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: groundcheck-backend
+    restart: unless-stopped
     ports:
-      - 8000:8000
+      - "8000:8000"
+    environment:
+      # ── Supabase PostgreSQL (required) ──
+      DB_IP:   ${DB_IP}
+      DB_PORT: ${DB_PORT:-5432}
+      DB_NAME: ${DB_NAME:-postgres}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASS: ${DB_PASS}
+      # ── LLM pipeline ──
+      # "ollama" → uses the ollama service below
+      # "vllm"   → uses an external vLLM endpoint (HPC)
+      PIPELINE: ${PIPELINE:-ollama}
+      # When PIPELINE=ollama this points to the ollama service.
+      # Override with OLLAMA_BASE_URL=http://host-ip:11434 to use host Ollama.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-300}
+      # ── ChromaDB & uploads ── (paths are inside the container)
+      CHROMA_PERSIST_PATH: /app/chroma_db
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      # Bind mounts — use the existing local ChromaDB and uploads directly
+      # so the container sees the already-ingested documents without re-ingestion.
+      - ./backend/chroma_db:/app/chroma_db
+      - ./backend/uploads:/app/uploads
+      # Cache HuggingFace model weights (sentence-transformers, NLI model)
+      # so they are not re-downloaded on every container start.
+      - model-cache:/root/.cache/huggingface
+      - nltk-data:/root/nltk_data
+    # Force IPv4-only DNS resolution so psycopg2 doesn't try the IPv6
+    # address returned by Supabase's DNS (unreachable inside Docker on Windows).
+    sysctls:
+      net.ipv6.conf.all.disable_ipv6: 1
+    networks:
+      - groundcheck-net
+    depends_on:
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s   # allow time for ML model loading
+      retries: 3
 
+  # ── Frontend (React → nginx) ─────────────────────────────────────────────
   frontend:
     build:
-      context: .
-      dockerfile: Dockerfile.frontend
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # In Docker, the browser talks to the nginx proxy (same origin),
+        # which forwards /api and /v1 to the backend container.
+        VITE_API_BASE_URL: ""
+        VITE_APP_NAME: ${VITE_APP_NAME:-AI Trust Metrics}
+    container_name: groundcheck-frontend
+    restart: unless-stopped
     ports:
-      - 3000:3000
+      - "3000:80"
+    networks:
+      - groundcheck-net
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
+  # ── Ollama (local LLM inference) ─────────────────────────────────────────
+  # Serves mistral:7b-instruct at http://ollama:11434 (internal network).
+  #
+  # GPU (NVIDIA): Ensure the NVIDIA Container Toolkit is installed, then run:
+  #   docker compose --profile gpu up
+  #
+  # CPU only (slower, ~1–5 min per query):
+  #   docker compose up          (default — no profile needed)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: groundcheck-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - groundcheck-net
+    # GPU config — only active when --profile gpu is passed.
+    # Remove or comment out the 'profiles' and 'deploy' blocks if you want
+    # GPU enabled by default.
+    profiles: []   # empty = always started
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+# ── Named volumes ─────────────────────────────────────────────────────────
+volumes:
+  chroma-data:
+    name: groundcheck-chroma
+  uploads-data:
+    name: groundcheck-uploads
+  model-cache:
+    name: groundcheck-model-cache
+  nltk-data:
+    name: groundcheck-nltk
+  ollama-data:
+    name: groundcheck-ollama
+
+# ── Network ───────────────────────────────────────────────────────────────
+networks:
+  groundcheck-net:
+    name: groundcheck-network
+    driver: bridge
