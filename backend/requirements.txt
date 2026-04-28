@@ -3,6 +3,7 @@ fastapi
 uvicorn
 python-multipart
 pydantic
+slowapi
 
 # Database
 sqlalchemy

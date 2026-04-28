@@ -307,6 +307,38 @@
         "schema_version": "1.0.0"
       },
       "status": "success"
+    },
+
+    "stored_result_example": {
+      "$comment": "Retrieval via /v1/results/{query_id} (StoredResult schema)",
+      "query_id": "q_20260315_143210_abc123",
+      "prompt": "What is the minimum yield strength for ASTM A36 steel?",
+      "model_name": "mistralai/Mistral-7B-Instruct-v0.2",
+      "answer": "The minimum yield strength for ASTM A36 steel is 36,000 psi (250 MPa) per ASTM specification A36/A36M.",
+      "confidence_score": 91,
+      "confidence_tier": "HIGH",
+      "evidence": [
+        {
+          "content": "ASTM A36 steel has a minimum yield strength of 36 ksi (250 MPa) as defined in ASTM A36/A36M.",
+          "source_uri": "Materials_Handbook.pdf",
+          "relevance_score": 0.94
+        }
+      ],
+      "signals": {
+        "score": 0.91,
+        "method": "fusion",
+        "explanation": "Fused from NLI and logprobs"
+      },
+      "created_at": "2026-03-15T14:32:10Z"
+    },
+
+    "weight_response_example": {
+      "$comment": "Response received when interacting with /v1/weights (WeightResponse schema)",
+      "weight_grounding": 0.70,
+      "weight_generation": 0.30,
+      "is_default": true,
+      "updated_at": "2026-03-15T10:12:00Z"
     }
+
   }
 }

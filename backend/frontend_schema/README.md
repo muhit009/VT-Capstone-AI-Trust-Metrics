@@ -1,3 +1,6 @@
+Here is the complete, updated `README.md` file in a single block so you can copy and paste it all at once.
+
+```markdown
 # GroundCheck — Schema & API Documentation
 
 This folder contains the formal API contract for the GroundCheck backend.
@@ -11,7 +14,7 @@ integrators. They are not imported or executed by any Python code.
 | File | Purpose |
 |---|---|
 | `groundcheck_response_schema.json` | Formal JSON Schema (draft-07) definition of every field in `GroundCheckResponse` |
-| `schema_examples.json` | Canonical example responses for all 7 scenarios |
+| `schema_examples.json` | Canonical example responses for all scenarios |
 | `openapi.yaml` | OpenAPI 3.1 / Swagger specification for all API endpoints |
 
 ---
@@ -99,19 +102,19 @@ integrators. They are not imported or executed by any Python code.
 
 ---
 
-## Feedback Endpoint
+## Key Endpoints
 
-The API supports user feedback and decision logging for each query result.
+### POST `/v1/query`
+
+Submit a RAG query, perform chunk retrieval, generate a response, calculate confidence, and store it to the database for historical lookup. *(Note: Preexisting clients may be looking for `/v1/rag/query`. It has been simplified to `/v1/query`).*
+
+### GET `/v1/results/{query_id}`
+
+Retrieve a previously generated RAG query result from the database via its `query_id`. 
 
 ### POST `/v1/feedback/{query_id}`
 
 Submit a decision and optional feedback for a previously generated answer.
-
-#### Path Parameters
-
-| Name | Type | Required | Description |
-|---|---|---|---|
-| `query_id` | string | ✓ | Query identifier returned from `/v1/rag/query` |
 
 #### Request Body
 
@@ -124,21 +127,12 @@ Submit a decision and optional feedback for a previously generated answer.
   "user_id": "optional-uuid"
 } 
 ```
-#### Response (201 Created)
 
-```json
-{
-  "query_id": "q_20260315_143210_abc123",
-  "decision_id": "uuid",
-  "status": "accepted",
-  "feedback_rating": 1,
-  "created_at": "2026-03-15T14:35:12Z"
-}
-```
+### Weight Configuration (`/v1/weights`)
 
-**Notes**
-- Call this after receiving a response from `/v1/rag/query`
-- `status` is required even without a rating
+- **GET `/v1/weights`**: Returns currently active confidence signal weights (grounding vs generation).
+- **PUT `/v1/weights`**: Save new weights (Validates that they sum to 1.0).
+- **DELETE `/v1/weights`**: Reset weights to system defaults.
 
 ---
 
