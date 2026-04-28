@@ -24,7 +24,7 @@ import time
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi import status as http_status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -41,11 +41,16 @@ from response_models import (
 )
 from confidence.engine import confidence_engine
 from routers.weights import load_weights
+from config import RATE_LIMIT
+
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from middleware.auth import require_api_key
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["query"])
-
+limiter = Limiter(key_func=get_remote_address)
 
 # ---------------------------------------------------------------------------
 # Request model (ticket #60 — POST /api/v1/query)
@@ -163,9 +168,11 @@ class StoredResult(BaseModel):
         500: {"description": "Internal pipeline error."},
     },
 )
+@limiter.limit(RATE_LIMIT)
 async def submit_query(
     payload: QueryRequest,
     db: Session = Depends(get_db),
+    _: str = Depends(require_api_key),
 ) -> GroundCheckResponse:
     """
     Submit a natural language query through the full RAG + confidence pipeline.

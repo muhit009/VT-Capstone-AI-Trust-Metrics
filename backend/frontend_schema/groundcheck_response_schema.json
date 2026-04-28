@@ -266,6 +266,60 @@
           "maxLength": 4096
         }
       }
+    },
+    "StoredResult": {
+      "type": "object",
+      "description": "Lightweight result model returned by GET /api/v1/results/{query_id}.",
+      "required": ["query_id", "prompt", "evidence"],
+      "properties": {
+        "query_id": { "type": "string" },
+        "prompt": { "type": "string" },
+        "model_name": { "type": ["string", "null"] },
+        "answer": { "type": ["string", "null"] },
+        "confidence_score": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+        "confidence_tier": { "type": ["string", "null"], "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/StoredEvidence" }
+        },
+        "signals": { "$ref": "#/definitions/StoredSignals" },
+        "created_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "StoredEvidence": {
+      "type": "object",
+      "properties": {
+        "content": { "type": ["string", "null"] },
+        "source_uri": { "type": ["string", "null"] },
+        "relevance_score": { "type": ["number", "null"] }
+      }
+    },
+    "StoredSignals": {
+      "type": "object",
+      "properties": {
+        "score": { "type": ["number", "null"] },
+        "method": { "type": ["string", "null"] },
+        "explanation": { "type": ["string", "null"] }
+      }
+    },
+    "WeightResponse": {
+      "type": "object",
+      "required": ["weight_grounding", "weight_generation", "is_default"],
+      "properties": {
+        "weight_grounding": { "type": "number" },
+        "weight_generation": { "type": "number" },
+        "is_default": { "type": "boolean" },
+        "updated_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    },
+    "WeightUpdateRequest": {
+      "type": "object",
+      "required": ["weight_grounding", "weight_generation"],
+      "properties": {
+        "weight_grounding": { "type": "number", "minimum": 0.05, "maximum": 0.95 },
+        "weight_generation": { "type": "number", "minimum": 0.05, "maximum": 0.95 },
+        "updated_by": { "type": ["string", "null"], "maxLength": 128 }
+      }
     }
   }
 }

@@ -24,6 +24,10 @@ load_dotenv()
 #   "vllm"   — HPC/production via vLLM OpenAI-compatible API
 PIPELINE = os.getenv("PIPELINE", "ollama").lower()
 
+API_KEY         = os.getenv("API_KEY")           # None in dev = auth disabled
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS")   # None in dev = allow all
+RATE_LIMIT      = os.getenv("RATE_LIMIT", "10/minute")
+
 # ---------------------------------------------------------------------------
 # Ollama (local dev only - PIPELINE=ollama)
 # ---------------------------------------------------------------------------
