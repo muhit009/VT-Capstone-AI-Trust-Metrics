@@ -170,6 +170,7 @@ class StoredResult(BaseModel):
 )
 @limiter.limit(RATE_LIMIT)
 async def submit_query(
+    request: Request,
     payload: QueryRequest,
     db: Session = Depends(get_db),
     _: str = Depends(require_api_key),
