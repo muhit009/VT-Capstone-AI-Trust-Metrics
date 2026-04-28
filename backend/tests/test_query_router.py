@@ -175,19 +175,17 @@ class TestSubmitQueryValidation:
 class TestSubmitQuerySuccess:
     @patch("routers.query.rag_orchestrator")
     @patch("routers.query.confidence_engine")
-    @patch("routers.query.grounding_scorer")
     @patch("routers.query.query_logger")
     @patch("routers.query.model_executor")
     @patch("routers.query.ResponseBuilder")
     def test_200_returns_groundcheck_shape(
         self,
         mock_builder, mock_executor, mock_logger,
-        mock_grounding, mock_ce, mock_orch, client,
+        mock_ce, mock_orch, client,
     ):
         from response_models import GroundCheckResponse
         mock_orch.run.return_value = _mock_rag_response()
         mock_ce.score.return_value = _mock_confidence_result()
-        mock_grounding.compute.return_value = MagicMock(claim_details=[])
         mock_logger.log_query.return_value = MagicMock(id=uuid.uuid4())
         mock_logger.log_answer.return_value = MagicMock()
         mock_executor._last_logprobs = []

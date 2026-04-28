@@ -151,7 +151,7 @@ class TestConfidenceDataFromResult:
     def test_maps_gen_confidence(self):
         result = make_confidence_result(gen_confidence=0.75)
         cd = ConfidenceData.from_confidence_result(result)
-        assert cd.signals.generation_confidence_normalized == 0.75
+        assert cd.signals.gen_confidence_normalized == 0.75
 
     def test_both_signals_default_weights(self):
         result = make_confidence_result(grounding_score=0.9, gen_confidence=0.7)
