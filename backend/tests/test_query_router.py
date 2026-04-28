@@ -30,6 +30,9 @@ from fastapi.testclient import TestClient
 # We test the router in isolation by building a minimal app
 from routers.query import router, QueryRequest, StoredResult
 
+from middleware.auth import require_api_key
+from database import get_db
+
 # ---------------------------------------------------------------------------
 # App + client fixtures
 # ---------------------------------------------------------------------------
@@ -38,6 +41,9 @@ from routers.query import router, QueryRequest, StoredResult
 def app():
     app = FastAPI()
     app.include_router(router)
+
+    # Bypass API key auth in tests — we test auth separately
+    app.dependency_overrides[require_api_key] = lambda: "test-key"
     return app
 
 
@@ -246,13 +252,13 @@ class TestGetResultValidation:
         resp = client.get("/api/v1/results/not-a-real-id-at-all")
         assert resp.status_code == 400
 
-    def test_random_uuid_not_found_returns_404(self, client):
+    def test_random_uuid_not_found_returns_404(self, client, app):
         uid = str(uuid.uuid4())
-        with patch("routers.query.get_db") as mock_get_db:
-            db = MagicMock()
-            db.query.return_value.filter.return_value.first.return_value = None
-            mock_get_db.return_value = iter([db])
-            resp = client.get(f"/api/v1/results/{uid}")
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = None
+        app.dependency_overrides[get_db] = lambda: db
+        resp = client.get(f"/api/v1/results/{uid}")
+        app.dependency_overrides.pop(get_db, None)
         assert resp.status_code == 404
 
 
