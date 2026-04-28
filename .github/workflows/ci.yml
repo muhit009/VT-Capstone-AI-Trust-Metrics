@@ -48,7 +48,7 @@ jobs:
         run: pytest tests/ -v --tb=short
 
   # ---------------------------------------------------------------------------
-  # Job 2: Build and push Docker image (only on push to main)
+  # Job 2: Build and push Docker image (only on push to main) 
   # ---------------------------------------------------------------------------
   build:
     name: Build and push Docker image
@@ -78,12 +78,13 @@ jobs:
           tags: |
             type=sha,prefix=sha-
             type=raw,value=latest
-
+            
+      # (no need to do the frontend image)
       - name: Build and push image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
-          file: ./backend/Dockerfile.backend
+          file: ./backend/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
