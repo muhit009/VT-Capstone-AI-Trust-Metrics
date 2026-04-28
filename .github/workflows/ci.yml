@@ -40,6 +40,11 @@ jobs:
         env:
           PIPELINE: ollama          # use offline defaults — no real services needed
           API_KEY: ""               # disabled in CI (dev mode)
+          DB_IP: localhost          # dummy db labels to stop timeouts
+          DB_PORT: 5432
+          DB_NAME: test
+          DB_USER: test
+          DB_PASS: test
         run: pytest tests/ -v --tb=short
 
   # ---------------------------------------------------------------------------
