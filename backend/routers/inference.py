@@ -25,6 +25,7 @@ from rag_orchestrator import rag_orchestrator
 from response_models import GroundCheckResponse, ResponseBuilder, ErrorCode
 from confidence.engine import confidence_engine
 from confidence.grounding_scorer import grounding_scorer
+from routers.weights import load_weights
 
 router = APIRouter(prefix="/v1")
 
@@ -82,10 +83,13 @@ async def rag_query(payload: RAGInferenceRequest, db: Session = Depends(get_db))
             except Exception:
                 grounding_result = None
 
+        w_grounding, w_gen = load_weights(db)
         confidence_result = confidence_engine.score(
             answer=rag_response.answer or "",
             chunks=chunk_texts,
             logprobs=logprobs,
+            weight_grounding=w_grounding,
+            weight_gen_conf=w_gen,
         )
 
         processing_time_ms = int((time.monotonic() - t_start) * 1000)

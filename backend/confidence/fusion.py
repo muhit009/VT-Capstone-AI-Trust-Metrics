@@ -40,6 +40,8 @@ class FusionResult:
     gen_conf_contribution:    float          # points from gen confidence (up to 30)
     degraded:                 bool           # True if one signal was missing
     warning:                  Optional[str]  # human-readable warning or None
+    weight_grounding:         float = WEIGHT_GROUNDING
+    weight_gen_conf:          float = WEIGHT_GEN_CONF
 
     def to_dict(self) -> dict:
         return {
@@ -140,4 +142,6 @@ def fuse(
         gen_conf_contribution=round(c_contrib, 4),
         degraded=False,
         warning=None,
+        weight_grounding=w_g,
+        weight_gen_conf=w_c,
     )

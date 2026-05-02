@@ -213,9 +213,12 @@ class ConfidenceData(BaseModel):
         degraded   = confidence_result.degraded
         warning    = confidence_result.warning
 
-        # Derive weights from degraded state
+        # Use actual weights from fusion (stored in signals)
         if grounding is not None and gen_conf is not None:
-            weights = FusionWeights(grounding=0.7, generation=0.3)
+            weights = FusionWeights(
+                grounding=signals.get("weight_grounding", 0.7),
+                generation=signals.get("weight_gen_conf", 0.3),
+            )
         elif grounding is not None:
             weights = FusionWeights(grounding=1.0, generation=0.0)
         elif gen_conf is not None:

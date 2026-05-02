@@ -124,6 +124,8 @@ class ConfidenceEngine:
             "gen_confidence_level":      gen_result.level if gen_result else None,
             "grounding_contribution":    fusion.grounding_contribution,
             "gen_conf_contribution":     fusion.gen_conf_contribution,
+            "weight_grounding":          fusion.weight_grounding,
+            "weight_gen_conf":           fusion.weight_gen_conf,
         }
 
         explanation = generate_explanation(

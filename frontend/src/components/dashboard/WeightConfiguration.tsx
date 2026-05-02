@@ -41,8 +41,8 @@ export default function WeightConfiguration() {
   useEffect(() => {
     weightsService.get()
       .then((res) => {
-        setWeights({ grounding: res.data.weight_grounding, generation: res.data.weight_generation });
-        setIsDefault(res.data.is_default);
+        setWeights({ grounding: (res as any).weight_grounding, generation: (res as any).weight_generation });
+        setIsDefault((res as any).is_default);
         setStatus('idle');
       })
       .catch(() => {
@@ -74,7 +74,7 @@ export default function WeightConfiguration() {
     setErrorMsg(null);
     try {
       const res = await weightsService.save(weights.grounding, weights.generation);
-      setIsDefault(res.data.is_default);
+      setIsDefault((res as any).is_default);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(weights));
       setStatus('saved');
       setTimeout(() => setStatus('idle'), 2500);
