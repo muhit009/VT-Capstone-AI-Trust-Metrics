@@ -38,17 +38,17 @@ jobs:
 
       - name: Run tests
         env:
-          PIPELINE: ollama          # use offline defaults — no real services needed
-          API_KEY: ""               # disabled in CI (dev mode)
+          PIPELINE: chat            # use chat pipeline defaults — no real services needed
           DB_IP: localhost          # dummy db labels to stop timeouts
           DB_PORT: 5432
           DB_NAME: test
           DB_USER: test
           DB_PASS: test
+          CHAT_API_KEY: ""          # no real key needed for offline tests
         run: pytest tests/ -v --tb=short
 
   # ---------------------------------------------------------------------------
-  # Job 2: Build and push Docker image (only on push to main) 
+  # Job 2: Build and push Docker image (only on push to main)
   # ---------------------------------------------------------------------------
   build:
     name: Build and push Docker image
@@ -78,8 +78,7 @@ jobs:
           tags: |
             type=sha,prefix=sha-
             type=raw,value=latest
-            
-      # (no need to do the frontend image)
+
       - name: Build and push image
         uses: docker/build-push-action@v5
         with:
@@ -90,45 +89,16 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
   # ---------------------------------------------------------------------------
-  # Job 3: Deploy to cloud VM (only on push to main, after image is pushed)
+  # Job 3: Trigger Render deploy (only on push to main, after image is pushed)
   # ---------------------------------------------------------------------------
   deploy:
-    name: Deploy to cloud
+    name: Deploy to Render
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            set -e
-
-            cd ~/app
-
-            # Pull latest docker-compose + nginx config
-            git pull origin main
-
-            # Write production .env from GitHub Secret
-            echo "${{ secrets.DEPLOY_ENV }}" > .env
-
-            # Pull new backend image and restart containers
-            docker compose pull backend
-            docker compose up -d
-
-            # Health check — rollback if it fails
-            sleep 10
-            if ! curl -sf http://localhost:8000/v1/health; then
-              echo "Health check failed — rolling back"
-              docker compose rollout backend --rollback
-              exit 1
-            fi
-
-            echo "Deployment successful"
+      - name: Trigger Render deploy hook
+        run: |
+          curl -fsSL -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          

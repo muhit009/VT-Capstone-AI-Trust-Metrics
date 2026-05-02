@@ -1,0 +1,16 @@
+DB_IP=aws-1-us-east-2.pooler.supabase.com
+DB_PORT=5432
+DB_NAME=postgres
+DB_USER=postgres.fvejraxbxmiyiyiaypnu
+DB_PASS=Muhit bhai is Back@2018
+PIPELINE=chat
+
+#GROQ
+CHAT_API_KEY=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
+CHAT_BASE_URL=https://integrate.api.nvidia.com/v1
+CHAT_MODEL=mistralai/mistral-medium-3.5-128b
+# Ollama is running natively on the Windows host.
+# host.docker.internal resolves to the host machine from inside Docker Desktop.
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+
+VITE_APP_NAME=AI Trust Metrics

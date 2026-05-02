@@ -45,7 +45,6 @@ from config import RATE_LIMIT
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from middleware.auth import require_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +172,6 @@ async def submit_query(
     request: Request,
     payload: QueryRequest,
     db: Session = Depends(get_db),
-    _: str = Depends(require_api_key),
 ) -> GroundCheckResponse:
     """
     Submit a natural language query through the full RAG + confidence pipeline.
