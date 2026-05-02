@@ -20,11 +20,11 @@ load_dotenv()
 # Deployment
 # ---------------------------------------------------------------------------
 # Which LLM backend to use.
-#   "ollama" — local dev via Ollama HTTP API (default)
+#   "chat"   — NVIDIA NIM or any OpenAI-compatible API (production/Render)
+#   "ollama" — local dev via Ollama HTTP API
 #   "vllm"   — HPC/production via vLLM OpenAI-compatible API
-PIPELINE = os.getenv("PIPELINE", "ollama").lower()
+PIPELINE = os.getenv("PIPELINE", "chat").lower()
 
-API_KEY         = os.getenv("API_KEY")           # None in dev = auth disabled
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS")   # None in dev = allow all
 RATE_LIMIT      = os.getenv("RATE_LIMIT", "10/minute")
 
@@ -58,7 +58,7 @@ VLLM_RETRY_DELAY    = 5   # seconds to wait between retries
 # ---------------------------------------------------------------------------
 CHAT_BASE_URL       = os.getenv("CHAT_BASE_URL",  "https://integrate.api.nvidia.com/v1")
 CHAT_API_KEY        = os.getenv("CHAT_API_KEY",   "")
-CHAT_MODEL          = os.getenv("CHAT_MODEL",     "mistralai/mistral-large-3-675b-instruct-2512")
+CHAT_MODEL          = os.getenv("CHAT_MODEL",     "mistralai/mistral-medium-3.5-128b")
 CHAT_TIMEOUT        = 240
 CHAT_OPTIONS        = {
     "temperature": 0,
