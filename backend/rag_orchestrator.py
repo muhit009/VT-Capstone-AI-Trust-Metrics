@@ -41,9 +41,11 @@ from models.schemas import InferenceRequest, ConfidenceMetrics
 
 SYSTEM_PROMPT = """\
 You are a precise engineering assistant. Answer the user's question using \
-ONLY the information in the provided context. If the context does not \
-contain enough information to answer the question, say so explicitly — \
-do not guess or use outside knowledge.
+the information in the provided context. Synthesize and summarize what the \
+context says — even if it is not an exhaustive list, extract and present \
+whatever relevant information is available. Only say the context is \
+insufficient if it contains no relevant information at all. Do not use \
+outside knowledge beyond what is in the context.
 
 Always be concise and cite the source document and page number when making \
 a specific factual claim (e.g. "per Materials_Handbook.pdf p.12").
@@ -176,9 +178,25 @@ class RAGOrchestrator:
         citations = self._retrieval.retrieve(query, top_k=top_k)
         context   = self._retrieval.format_context(citations)
 
+        # Short-circuit: no relevant chunks → skip LLM call entirely
+        if not citations:
+            processing_time_ms = int((time.monotonic() - t_start) * 1000)
+            return RAGResponse(
+                query=query,
+                answer=(
+                    "I could not find any relevant information in the uploaded documents "
+                    "to answer your question. Please upload documents related to your query."
+                ),
+                citations=[],
+                confidence=None,
+                model_name=self._model_svc.model_id,
+                retrieved_chunks=0,
+                processing_time_ms=processing_time_ms,
+                prompt_used="[no retrieval — skipped LLM call]",
+            )
+
         # Step 2 — Build prompt
-        prompt_template  = RAG_CHAT_PROMPT if citations else NO_CONTEXT_PROMPT
-        rendered_messages = prompt_template.format_messages(
+        rendered_messages = RAG_CHAT_PROMPT.format_messages(
             context=context,
             question=query,
         )

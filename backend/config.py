@@ -54,6 +54,20 @@ VLLM_RETRY_ATTEMPTS = 3   # number of retry attempts on connection failure
 VLLM_RETRY_DELAY    = 5   # seconds to wait between retries
 
 # ---------------------------------------------------------------------------
+# Chat API (PIPELINE=chat) — NVIDIA NIM, ARC, or any OpenAI-compatible endpoint
+# ---------------------------------------------------------------------------
+CHAT_BASE_URL       = os.getenv("CHAT_BASE_URL",  "https://integrate.api.nvidia.com/v1")
+CHAT_API_KEY        = os.getenv("CHAT_API_KEY",   "")
+CHAT_MODEL          = os.getenv("CHAT_MODEL",     "mistralai/mistral-large-3-675b-instruct-2512")
+CHAT_TIMEOUT        = 240
+CHAT_OPTIONS        = {
+    "temperature": 0,
+    "max_tokens":  512,
+}
+CHAT_RETRY_ATTEMPTS = 3
+CHAT_RETRY_DELAY    = 5
+
+# ---------------------------------------------------------------------------
 # Grounding scorer (Signal 1)
 # ---------------------------------------------------------------------------
 NLI_MODEL          = "cross-encoder/nli-deberta-v3-small"

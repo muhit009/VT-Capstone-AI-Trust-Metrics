@@ -55,6 +55,11 @@ class ModelService:
             self._generate_fn = _gen
             self.model_id = VLLM_MODEL
             logger.info("ModelService: using vLLM pipeline (model=%s)", self.model_id)
+        elif pipeline == "chat":
+            from confidence.chat_client import generate as _gen, CHAT_MODEL
+            self._generate_fn = _gen
+            self.model_id = CHAT_MODEL
+            logger.info("ModelService: using chat pipeline (model=%s)", self.model_id)
         else:
             if pipeline != "ollama":
                 logger.warning(

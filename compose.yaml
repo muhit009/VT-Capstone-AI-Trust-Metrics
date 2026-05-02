@@ -24,6 +24,10 @@ services:
       # Override with OLLAMA_BASE_URL=http://host-ip:11434 to use host Ollama.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
       OLLAMA_TIMEOUT: ${OLLAMA_TIMEOUT:-300}
+      # ── Chat API (PIPELINE=chat) — NVIDIA NIM, ARC, or any OpenAI-compatible endpoint ──
+      CHAT_BASE_URL: ${CHAT_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      CHAT_API_KEY:  ${CHAT_API_KEY:-}
+      CHAT_MODEL:    ${CHAT_MODEL:-mistralai/mistral-large-3-675b-instruct-2512}
       # ── ChromaDB & uploads ── (paths are inside the container)
       CHROMA_PERSIST_PATH: /app/chroma_db
       UPLOAD_DIR: /app/uploads
