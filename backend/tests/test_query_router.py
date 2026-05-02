@@ -30,7 +30,6 @@ from fastapi.testclient import TestClient
 # We test the router in isolation by building a minimal app
 from routers.query import router, QueryRequest, StoredResult
 
-from middleware.auth import require_api_key
 from database import get_db
 
 # ---------------------------------------------------------------------------
@@ -41,9 +40,6 @@ from database import get_db
 def app():
     app = FastAPI()
     app.include_router(router)
-
-    # Bypass API key auth in tests — we test auth separately
-    app.dependency_overrides[require_api_key] = lambda: "test-key"
     return app
 
 
