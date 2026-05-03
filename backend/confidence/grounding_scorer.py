@@ -200,5 +200,11 @@ class GroundingScorer:
         return 0.0
 
 
-# Module-level singleton (loaded once at startup)
-grounding_scorer = GroundingScorer()
+# Lazy singleton — loaded on first use, not at import time
+_grounding_scorer: GroundingScorer | None = None
+
+def get_grounding_scorer() -> GroundingScorer:
+    global _grounding_scorer
+    if _grounding_scorer is None:
+        _grounding_scorer = GroundingScorer()
+    return _grounding_scorer

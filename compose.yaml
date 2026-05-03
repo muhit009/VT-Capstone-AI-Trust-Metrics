@@ -19,7 +19,7 @@ services:
       # ── LLM pipeline ──
       # "ollama" → uses the ollama service below
       # "vllm"   → uses an external vLLM endpoint (HPC)
-      PIPELINE: ${PIPELINE:-ollama}
+      PIPELINE: ${PIPELINE:-chat}
       # When PIPELINE=ollama this points to the ollama service.
       # Override with OLLAMA_BASE_URL=http://host-ip:11434 to use host Ollama.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}

@@ -24,7 +24,7 @@ from services.model_service import model_executor
 from rag_orchestrator import rag_orchestrator
 from response_models import GroundCheckResponse, ResponseBuilder, ErrorCode
 from confidence.engine import confidence_engine
-from confidence.grounding_scorer import grounding_scorer
+from confidence.grounding_scorer import get_grounding_scorer
 from routers.weights import load_weights
 
 router = APIRouter(prefix="/v1")
@@ -76,7 +76,7 @@ async def rag_query(payload: RAGInferenceRequest, db: Session = Depends(get_db))
         grounding_result = None
         if chunk_texts and rag_response.answer:
             try:
-                grounding_result = grounding_scorer.compute(
+                grounding_result = get_grounding_scorer.compute(
                     answer=rag_response.answer,
                     chunks=chunk_texts,
                 )

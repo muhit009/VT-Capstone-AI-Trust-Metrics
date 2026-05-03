@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, Future
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .grounding_scorer        import grounding_scorer, GroundingResult
+from .grounding_scorer        import get_grounding_scorer, GroundingResult
 from .generation_confidence   import generation_confidence_scorer
 from .fusion                  import fuse
 from .explanation_generator   import generate_explanation
@@ -88,7 +88,7 @@ class ConfidenceEngine:
         gen_confidence   = None
 
         with ThreadPoolExecutor(max_workers=2) as pool:
-            f_grounding: Future = pool.submit(grounding_scorer.compute, answer, chunks)
+            f_grounding: Future = pool.submit(get_grounding_scorer().compute, answer, chunks)
             f_gen:       Future = pool.submit(generation_confidence_scorer.compute, logprobs)
 
             try:
