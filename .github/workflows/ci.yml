@@ -99,5 +99,5 @@ jobs:
           aws ecs update-service \
             --cluster default \
             --service groundcheck-backend-1308 \
-            --task-definition default-groundcheck-backend-1308:3 \
+            --task-definition default-groundcheck-backend-1308:8 \
             --force-new-deployment
