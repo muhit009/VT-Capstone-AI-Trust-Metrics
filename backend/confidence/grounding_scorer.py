@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 import nltk
 from transformers import pipeline
 
-from .config import NLI_MODEL, TOP_K_CHUNKS, MIN_CLAIM_WORDS
+from .config import NLI_MODEL, TOP_K_CHUNKS, MIN_CLAIM_WORDS, MAX_CLAIMS
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ class GroundingScorer:
         GroundingResult
         """
         chunks = chunks[:top_k]
-        claims = self._extract_claims(answer)
+        claims = self._extract_claims(answer)[:MAX_CLAIMS]
         logger.info("Extracted %d claims from answer (%d chars)", len(claims), len(answer))
 
         if not claims:

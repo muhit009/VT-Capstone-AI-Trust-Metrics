@@ -27,6 +27,7 @@ from config import (  # noqa: F401
     NLI_MODEL,
     TOP_K_CHUNKS,
     MIN_CLAIM_WORDS,
+    MAX_CLAIMS,
     GEN_CONF_RAW_MIN,
     GEN_CONF_RAW_MAX,
     GEN_CONF_HIGHLY_CONFIDENT_THRESHOLD,

@@ -73,6 +73,7 @@ CHAT_RETRY_DELAY    = 5
 NLI_MODEL          = "cross-encoder/nli-deberta-v3-small"
 TOP_K_CHUNKS       = 5
 MIN_CLAIM_WORDS    = 5    # sentences shorter than this are skipped
+MAX_CLAIMS         = 8    # cap NLI inference to keep CPU latency bounded
 
 # ---------------------------------------------------------------------------
 # Generation confidence scorer (Signal 2)
