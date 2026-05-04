@@ -40,7 +40,7 @@ from models.schemas import InferenceRequest, ConfidenceMetrics
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """\
-You are a precise engineering assistant. Answer the user's question using \
+You are a precise assistant. Answer the user's question using \
 the information in the provided context. Synthesize and summarize what the \
 context says — even if it is not an exhaustive list, extract and present \
 whatever relevant information is available. Only say the context is \
@@ -48,7 +48,7 @@ insufficient if it contains no relevant information at all. Do not use \
 outside knowledge beyond what is in the context.
 
 Always be concise and cite the source document and page number when making \
-a specific factual claim (e.g. "per Materials_Handbook.pdf p.12").
+a specific factual claim (e.g. "per Document.pdf p.12").
 """
 
 RAG_PROMPT_TEMPLATE = """\
