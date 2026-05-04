@@ -1,10 +1,8 @@
 import { useMemo, useState } from 'react';
-import Sidebar from '@/components/dashboard/Sidebar';
-import TopBar from '@/components/dashboard/TopBar';
 import ChatInterface from '@/components/dashboard/ChatInterface';
 import RightPanel from '@/components/dashboard/RightPanel';
-import SettingsPanel from '@/components/dashboard/SettingsPanel';
 import { queryService } from '@/services/api';
+import { saveQueryToHistory } from '@/services/queryHistory';
 
 function buildAssistantText(response) {
   if (!response) return 'No answer returned.';
@@ -12,7 +10,6 @@ function buildAssistantText(response) {
 }
 
 export default function AnalystChat() {
-  const [activeView, setActiveView] = useState('chat');
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,6 +43,9 @@ export default function AnalystChat() {
 
       setMessages((current) => [...current, assistantMessage]);
       setLatestResponse(response);
+      if (response.status === 'success' || response.status === 'partial_success') {
+        saveQueryToHistory(response);
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unable to get an answer right now.';
@@ -76,36 +76,24 @@ export default function AnalystChat() {
   const visibleMessages = useMemo(() => messages, [messages]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-gray-50">
-      <Sidebar activeView={activeView} onChangeView={setActiveView} />
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar />
-
-        {requestError && activeView === 'chat' ? (
-          <div className="border-b border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-700">
-            {requestError}
-          </div>
-        ) : null}
-
-        <div className="flex min-h-0 flex-1">
-          {activeView === 'chat' ? (
-            <>
-              <ChatInterface
-                messages={visibleMessages}
-                draft={draft}
-                setDraft={setDraft}
-                isSubmitting={isSubmitting}
-                onSubmit={handleSubmit}
-                onReset={handleReset}
-              />
-              <RightPanel latestResponse={latestResponse} />
-            </>
-          ) : (
-            <SettingsPanel />
-          )}
+    <>
+      {requestError ? (
+        <div className="border-b border-rose-200 bg-rose-50 px-6 py-3 text-sm text-rose-700">
+          {requestError}
         </div>
+      ) : null}
+
+      <div className="flex min-h-0 flex-1">
+        <ChatInterface
+          messages={visibleMessages}
+          draft={draft}
+          setDraft={setDraft}
+          isSubmitting={isSubmitting}
+          onSubmit={handleSubmit}
+          onReset={handleReset}
+        />
+        <RightPanel latestResponse={latestResponse} />
       </div>
-    </div>
+    </>
   );
 }

@@ -8,6 +8,8 @@ import {
   RotateCcw,
 } from 'lucide-react';
 
+import FeedbackWidget from '@/components/common/FeedbackWidget';
+
 const tierStyles = {
   HIGH: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   MEDIUM: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -105,14 +107,22 @@ function AssistantMessage({ message, onCopy }) {
               </div>
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-2 border-t border-gray-200 pt-4">
-              <button
-                type="button"
-                onClick={() => onCopy(message.content)}
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
-              >
-                <Copy className="h-3.5 w-3.5" /> Copy answer
-              </button>
+            <div className="mt-5 border-t border-gray-200 pt-4">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => onCopy(message.content)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copy answer
+                </button>
+              </div>
+
+              {response?.query_id ? (
+                <div className="mt-4">
+                  <FeedbackWidget queryId={response.query_id} />
+                </div>
+              ) : null}
             </div>
           </>
         ) : null}

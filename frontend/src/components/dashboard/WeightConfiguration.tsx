@@ -12,6 +12,14 @@ const PRESETS: Record<string, { label: string; grounding: number; generation: nu
 
 const SAMPLE = { grounding: 0.85, generation: 0.72 };
 
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatPoints(value: number) {
+  return `${value.toFixed(1)} pts`;
+}
+
 function tierOf(score: number) {
   if (score >= 70) return { label: 'HIGH',   className: 'text-green-700  bg-green-50  border-green-200'  };
   if (score >= 40) return { label: 'MEDIUM', className: 'text-yellow-700 bg-yellow-50 border-yellow-200' };
@@ -103,6 +111,10 @@ export default function WeightConfiguration() {
   const previewScore = Math.round(
     (weights.grounding * SAMPLE.grounding + weights.generation * SAMPLE.generation) * 100,
   );
+  const previewScoreExact =
+    (weights.grounding * SAMPLE.grounding + weights.generation * SAMPLE.generation) * 100;
+  const groundingContribution = weights.grounding * SAMPLE.grounding * 100;
+  const generationContribution = weights.generation * SAMPLE.generation * 100;
   const tier = tierOf(previewScore);
 
   return (
@@ -156,7 +168,7 @@ export default function WeightConfiguration() {
           {/* Grounding */}
           <div className="grid gap-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-gray-900">Grounding score</label>
+              <label className="text-sm font-medium text-gray-900">Grounding weight</label>
               <span className="text-sm font-semibold tabular-nums text-gray-900">
                 {(weights.grounding * 100).toFixed(0)}%
               </span>
@@ -171,14 +183,14 @@ export default function WeightConfiguration() {
               className="h-2 w-full cursor-pointer accent-blue-600"
             />
             <p className="text-xs leading-5 text-gray-500">
-              NLI-based signal — how well the answer is supported by retrieved documents.
+              Share of the final confidence score that comes from document grounding support.
             </p>
           </div>
 
           {/* Generation confidence */}
           <div className="grid gap-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-gray-900">Generation confidence</label>
+              <label className="text-sm font-medium text-gray-900">Generation-confidence weight</label>
               <span className="text-sm font-semibold tabular-nums text-gray-900">
                 {(weights.generation * 100).toFixed(0)}%
               </span>
@@ -193,7 +205,7 @@ export default function WeightConfiguration() {
               className="h-2 w-full cursor-pointer accent-blue-600"
             />
             <p className="text-xs leading-5 text-gray-500">
-              Token probability signal — the model's own certainty about its output.
+              Share of the final confidence score that comes from the model's own confidence signal.
             </p>
           </div>
         </div>
@@ -223,10 +235,48 @@ export default function WeightConfiguration() {
 
         {/* Live preview */}
         <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
-          <div className="text-sm font-medium text-gray-900">Live preview</div>
+          <div className="text-sm font-medium text-gray-900">How the weighting works</div>
           <p className="mt-1 text-xs leading-5 text-gray-500">
-            Sample inputs: grounding = {SAMPLE.grounding}, generation = {SAMPLE.generation}
+            This example uses sample signal values so you can see the math. It does not reflect the
+            current chat response.
           </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div className="rounded-2xl border border-gray-200 bg-white p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Grounding signal
+              </div>
+              <div className="mt-3 flex items-center justify-between text-sm text-gray-700">
+                <span>Sample signal score</span>
+                <span className="font-medium text-gray-900">{formatPercent(SAMPLE.grounding)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-sm text-gray-700">
+                <span>Your weight</span>
+                <span className="font-medium text-gray-900">{formatPercent(weights.grounding)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-sm text-gray-700">
+                <span>Contribution to final score</span>
+                <span className="font-medium text-gray-900">{formatPoints(groundingContribution)}</span>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-200 bg-white p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Generation-confidence signal
+              </div>
+              <div className="mt-3 flex items-center justify-between text-sm text-gray-700">
+                <span>Sample signal score</span>
+                <span className="font-medium text-gray-900">{formatPercent(SAMPLE.generation)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-sm text-gray-700">
+                <span>Your weight</span>
+                <span className="font-medium text-gray-900">{formatPercent(weights.generation)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-sm text-gray-700">
+                <span>Contribution to final score</span>
+                <span className="font-medium text-gray-900">{formatPoints(generationContribution)}</span>
+              </div>
+            </div>
+          </div>
           <div className="mt-4 flex items-center gap-4">
             <div className="text-4xl font-bold tabular-nums text-gray-900">{previewScore}</div>
             <div>
@@ -234,9 +284,11 @@ export default function WeightConfiguration() {
                 {tier.label} confidence
               </span>
               <p className="mt-1.5 text-xs text-gray-500">
-                {(weights.grounding * SAMPLE.grounding * 100).toFixed(0)} (grounding)
-                &nbsp;+&nbsp;
-                {(weights.generation * SAMPLE.generation * 100).toFixed(0)} (generation)
+                Final score = ({formatPercent(SAMPLE.grounding)} × {formatPercent(weights.grounding)})
+                {' '}+ ({formatPercent(SAMPLE.generation)} × {formatPercent(weights.generation)})
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                {formatPoints(groundingContribution)} + {formatPoints(generationContribution)} = {previewScoreExact.toFixed(1)}/100
               </p>
             </div>
           </div>

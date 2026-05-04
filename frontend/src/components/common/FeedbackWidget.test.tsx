@@ -50,36 +50,54 @@ describe('FeedbackWidget', () => {
   });
 
   it('submits feedback with rating and no comment', async () => {
-    mockSubmit.mockResolvedValue({ feedback_id: 'fb_001', status: 'ok' });
+    mockSubmit.mockResolvedValue({
+      query_id: QUERY_ID,
+      decision_id: 'fb_001',
+      status: 'accepted',
+      feedback_rating: 1,
+      created_at: null,
+    });
     render(<FeedbackWidget queryId={QUERY_ID} />);
     await userEvent.click(screen.getByRole('button', { name: 'Helpful' }));
     await userEvent.click(screen.getByRole('button', { name: /submit feedback/i }));
     await waitFor(() =>
-      expect(mockSubmit).toHaveBeenCalledWith({
-        query_id: QUERY_ID,
-        rating: 'helpful',
-        comment: undefined,
-      })
+      expect(mockSubmit).toHaveBeenCalledWith(QUERY_ID, {
+        status: 'accepted',
+        feedback_rating: 1,
+        feedback_comment: undefined,
+      }),
     );
   });
 
   it('submits feedback with rating and comment', async () => {
-    mockSubmit.mockResolvedValue({ feedback_id: 'fb_002', status: 'ok' });
+    mockSubmit.mockResolvedValue({
+      query_id: QUERY_ID,
+      decision_id: 'fb_002',
+      status: 'rejected',
+      feedback_rating: -1,
+      created_at: null,
+    });
     render(<FeedbackWidget queryId={QUERY_ID} />);
     await userEvent.click(screen.getByRole('button', { name: /unhelpful/i }));
     await userEvent.type(screen.getByLabelText(/additional comments/i), 'Too vague');
     await userEvent.click(screen.getByRole('button', { name: /submit feedback/i }));
     await waitFor(() =>
-      expect(mockSubmit).toHaveBeenCalledWith({
-        query_id: QUERY_ID,
-        rating: 'unhelpful',
-        comment: 'Too vague',
-      })
+      expect(mockSubmit).toHaveBeenCalledWith(QUERY_ID, {
+        status: 'rejected',
+        feedback_rating: -1,
+        feedback_comment: 'Too vague',
+      }),
     );
   });
 
   it('shows confirmation message after successful submission', async () => {
-    mockSubmit.mockResolvedValue({ feedback_id: 'fb_003', status: 'ok' });
+    mockSubmit.mockResolvedValue({
+      query_id: QUERY_ID,
+      decision_id: 'fb_003',
+      status: 'accepted',
+      feedback_rating: 1,
+      created_at: null,
+    });
     render(<FeedbackWidget queryId={QUERY_ID} />);
     await userEvent.click(screen.getByRole('button', { name: 'Helpful' }));
     await userEvent.click(screen.getByRole('button', { name: /submit feedback/i }));
@@ -87,7 +105,13 @@ describe('FeedbackWidget', () => {
   });
 
   it('writes to localStorage after successful submission', async () => {
-    mockSubmit.mockResolvedValue({ feedback_id: 'fb_004', status: 'ok' });
+    mockSubmit.mockResolvedValue({
+      query_id: QUERY_ID,
+      decision_id: 'fb_004',
+      status: 'accepted',
+      feedback_rating: 1,
+      created_at: null,
+    });
     render(<FeedbackWidget queryId={QUERY_ID} />);
     await userEvent.click(screen.getByRole('button', { name: 'Helpful' }));
     await userEvent.click(screen.getByRole('button', { name: /submit feedback/i }));
@@ -99,6 +123,7 @@ describe('FeedbackWidget', () => {
     localStorage.setItem(STORAGE_KEY, '1');
     render(<FeedbackWidget queryId={QUERY_ID} />);
     expect(screen.getByTestId('already-submitted')).toBeInTheDocument();
+    expect(screen.getByTestId('already-submitted')).toHaveTextContent(/feedback submitted/i);
     expect(screen.queryByRole('button', { name: 'Helpful' })).not.toBeInTheDocument();
   });
 

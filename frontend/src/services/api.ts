@@ -36,6 +36,42 @@ export const feedbackService = {
     apiClient.post(`/api/v1/feedback/${queryId}`, payload) as Promise<FeedbackResponse>,
 };
 
+export interface DocumentsListResponse {
+  documents: string[];
+  total: number;
+}
+
+export interface DocumentUploadResponse {
+  filename: string;
+  file_type: string;
+  page_count: number;
+  chunk_count: number;
+  embedding_dim: number;
+  status: string;
+}
+
+export interface DocumentDeleteResponse {
+  filename: string;
+  chunks_deleted: number;
+  status: string;
+}
+
+export const documentsService = {
+  list: () => apiClient.get('/v1/documents/') as Promise<DocumentsListResponse>,
+  upload: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return apiClient.post('/v1/documents/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }) as Promise<DocumentUploadResponse>;
+  },
+  delete: (filename: string) =>
+    apiClient.delete(
+      `/v1/documents/${encodeURIComponent(filename)}`,
+    ) as Promise<DocumentDeleteResponse>,
+};
+
 export interface WeightResponse {
   weight_grounding:  number;
   weight_generation: number;
