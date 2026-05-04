@@ -7,6 +7,7 @@ import {
   AlertCircle,
   RotateCcw,
 } from 'lucide-react';
+import FeedbackWidget from '../common/FeedbackWidget';
 
 const tierStyles = {
   HIGH: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -105,7 +106,11 @@ function AssistantMessage({ message, onCopy }) {
               </div>
             </div>
 
-            <div className="mt-5 flex flex-wrap gap-2 border-t border-gray-200 pt-4">
+            <div className="mt-5 border-t border-gray-200 pt-4">
+              <FeedbackWidget queryId={response.query_id} />
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => onCopy(message.content)}
