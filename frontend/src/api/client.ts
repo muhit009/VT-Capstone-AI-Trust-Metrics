@@ -23,13 +23,20 @@ apiClient.interceptors.response.use(
   (response) => response.data,
   (error: unknown) => {
     const axiosErr = error as {
-      response?: { status?: number; data?: { message?: string; code?: string; details?: unknown } };
+      response?: {
+        status?: number;
+        data?: { message?: string; detail?: string; code?: string; details?: unknown };
+      };
       message?: string;
     };
 
     const httpStatus = axiosErr.response?.status;
     const responseData = axiosErr.response?.data;
-    const message = responseData?.message ?? axiosErr.message ?? 'An unexpected error occurred';
+    const message =
+      responseData?.message
+      ?? responseData?.detail
+      ?? axiosErr.message
+      ?? 'An unexpected error occurred';
     const code = responseData?.code;
     const details = responseData?.details;
 

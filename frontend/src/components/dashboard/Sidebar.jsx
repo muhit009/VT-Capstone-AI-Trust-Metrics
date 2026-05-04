@@ -1,27 +1,84 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   MessageSquare,
+  ChartColumn,
+  FileText,
   Settings,
   ChevronLeft,
   ChevronRight,
   Plus,
 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import boeingLogo from '@/assets/boeinglogo.png';
+import { placeholderRecentResponses } from '@/data/analyticsPlaceholders';
+import {
+  QUERY_HISTORY_UPDATED_EVENT,
+  readSavedQueryHistory,
+} from '@/services/queryHistory';
 
 const navItems = [
-  { id: 'chat', label: 'Chat', icon: MessageSquare },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'chat', label: 'Chat', icon: MessageSquare, to: '/dashboard/chat' },
+  { id: 'analytics', label: 'Analytics', icon: ChartColumn, to: '/dashboard/analytics' },
+  { id: 'documents', label: 'Documents', icon: FileText, to: '/dashboard/documents' },
+  { id: 'settings', label: 'Settings', icon: Settings, to: '/dashboard/settings' },
 ];
 
-const sampleConversations = [
-  { id: 1, title: 'Placeholder chat 1', time: '2 hours ago' },
-  { id: 2, title: 'Placeholder chat 2', time: '5 hours ago' },
-  { id: 3, title: 'Placeholder chat 3', time: 'Yesterday' },
-  { id: 4, title: 'Placeholder chat 4', time: '2 days ago' },
-];
+const sampleConversations = placeholderRecentResponses.map((response) => ({
+  id: response.id,
+  title: response.query,
+  time: response.timestampLabel,
+}));
 
-export default function Sidebar({ activeView = 'chat', onChangeView }) {
+function formatRelativeTime(timestamp) {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return 'Recently';
+
+  const diffMs = Date.now() - parsed.getTime();
+  const diffMinutes = Math.max(0, Math.floor(diffMs / (1000 * 60)));
+
+  if (diffMinutes < 1) return 'Just now';
+  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'} ago`;
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 7) return `${diffDays} days ago`;
+
+  return parsed.toLocaleDateString();
+}
+
+function toConversationItems(history) {
+  return history.map((entry) => ({
+    id: entry.queryId,
+    title: entry.query,
+    time: formatRelativeTime(entry.timestamp),
+  }));
+}
+
+export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [savedConversations, setSavedConversations] = useState(() =>
+    toConversationItems(readSavedQueryHistory()),
+  );
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const refreshHistory = () => {
+      setSavedConversations(toConversationItems(readSavedQueryHistory()));
+    };
+
+    refreshHistory();
+    window.addEventListener(QUERY_HISTORY_UPDATED_EVENT, refreshHistory);
+
+    return () => {
+      window.removeEventListener(QUERY_HISTORY_UPDATED_EVENT, refreshHistory);
+    };
+  }, []);
+
+  const conversations = savedConversations.length ? savedConversations : sampleConversations;
 
   return (
     <aside
@@ -86,6 +143,7 @@ export default function Sidebar({ activeView = 'chat', onChangeView }) {
       <div className="p-4">
         <button
           type="button"
+          onClick={() => navigate('/dashboard/chat')}
           className={[
             'flex items-center justify-center gap-2 rounded-xl bg-primary-600 text-sm font-medium text-white hover:bg-primary-700',
             collapsed ? 'h-16 w-full' : 'w-full px-4 py-3',
@@ -100,13 +158,13 @@ export default function Sidebar({ activeView = 'chat', onChangeView }) {
         <nav className="space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeView === item.id;
+            const isActive = location.pathname === item.to;
 
             return (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => onChangeView?.(item.id)}
+                onClick={() => navigate(item.to)}
                 className={[
                   'flex w-full items-center rounded-xl text-sm transition',
                   collapsed ? 'justify-center px-0 py-4' : 'gap-3 px-3 py-3',
@@ -130,10 +188,11 @@ export default function Sidebar({ activeView = 'chat', onChangeView }) {
           </div>
 
           <div className="space-y-1 overflow-auto pr-1">
-            {sampleConversations.map((conversation) => (
+            {conversations.map((conversation) => (
               <button
                 key={conversation.id}
                 type="button"
+                onClick={() => navigate('/dashboard/chat')}
                 className="w-full rounded-xl px-3 py-3 text-left hover:bg-gray-50"
               >
                 <div className="truncate text-sm font-medium text-gray-800">
