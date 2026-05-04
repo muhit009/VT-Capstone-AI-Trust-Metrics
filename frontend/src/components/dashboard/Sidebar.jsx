@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import boeingLogo from '@/assets/boeinglogo.png';
-import { placeholderRecentResponses } from '@/data/analyticsPlaceholders';
 import {
   QUERY_HISTORY_UPDATED_EVENT,
   readSavedQueryHistory,
@@ -22,12 +21,6 @@ const navItems = [
   { id: 'documents', label: 'Documents', icon: FileText, to: '/dashboard/documents' },
   { id: 'settings', label: 'Settings', icon: Settings, to: '/dashboard/settings' },
 ];
-
-const sampleConversations = placeholderRecentResponses.map((response) => ({
-  id: response.id,
-  title: response.query,
-  time: response.timestampLabel,
-}));
 
 function formatRelativeTime(timestamp) {
   const parsed = new Date(timestamp);
@@ -77,8 +70,6 @@ export default function Sidebar() {
       window.removeEventListener(QUERY_HISTORY_UPDATED_EVENT, refreshHistory);
     };
   }, []);
-
-  const conversations = savedConversations.length ? savedConversations : sampleConversations;
 
   return (
     <aside
@@ -187,21 +178,28 @@ export default function Sidebar() {
             Conversations
           </div>
 
-          <div className="space-y-1 overflow-auto pr-1">
-            {conversations.map((conversation) => (
-              <button
-                key={conversation.id}
-                type="button"
-                onClick={() => navigate('/dashboard/chat')}
-                className="w-full rounded-xl px-3 py-3 text-left hover:bg-gray-50"
-              >
-                <div className="truncate text-sm font-medium text-gray-800">
-                  {conversation.title}
-                </div>
-                <div className="mt-1 text-xs text-gray-500">{conversation.time}</div>
-              </button>
-            ))}
-          </div>
+          {savedConversations.length ? (
+            <div className="space-y-1 overflow-auto pr-1">
+              {savedConversations.map((conversation) => (
+                <button
+                  key={conversation.id}
+                  type="button"
+                  onClick={() => navigate('/dashboard/chat')}
+                  className="w-full rounded-xl px-3 py-3 text-left hover:bg-gray-50"
+                >
+                  <div className="truncate text-sm font-medium text-gray-800">
+                    {conversation.title}
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500">{conversation.time}</div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-sm text-gray-600">
+              Conversation history is not available yet. Start a chat to begin building
+              history.
+            </div>
+          )}
         </div>
       ) : null}
     </aside>

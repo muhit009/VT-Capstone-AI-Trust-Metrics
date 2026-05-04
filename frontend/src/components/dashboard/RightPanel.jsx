@@ -121,65 +121,20 @@ function buildExplanation(confidence, citations) {
   return { summary, bullets };
 }
 
-const previewResponse = {
-  confidence: {
-    final_score: 74,
-    tier: 'MEDIUM',
-    degraded: false,
-    explanation: 'MEDIUM confidence (score=74). Grounding score: 0.68 (NLI document support). Generation confidence: 0.71 (mean token probability).',
-    warnings: [
-      'This answer is useful, but fuel-efficiency comparisons depend heavily on mission assumptions and normalization variables.',
-    ],
-    signals: {
-      grounding_score: 0.68,
-      grounding_num_claims: 5,
-      grounding_supported: 4,
-      gen_confidence_raw: 0.71,
-      gen_confidence_normalized: 0.71,
-      gen_confidence_level: 'MODERATE',
-      grounding_contribution: 0.55,
-      gen_conf_contribution: 0.45,
-    },
-  },
-  citations: [
-    {
-      citation_id: 'aircraft_perf__chunk_0',
-      document: 'Aircraft Performance Primer',
-      section: 'Section 2.1',
-      page: 12,
-      chunk_id: 'chunk_0',
-      similarity_score: 0.92,
-      entailment_score: null,
-      text_excerpt: 'Fuel burn comparisons should be normalized by stage length, reserves, payload, and seating assumptions before comparing aircraft families.',
-    },
-    {
-      citation_id: 'eng_notes__chunk_1',
-      document: 'Internal Engineering Notes',
-      section: 'Entry #204',
-      page: null,
-      chunk_id: 'chunk_1',
-      similarity_score: 0.86,
-      entailment_score: null,
-      text_excerpt: 'Short-haul and long-haul fuel efficiency differ because climb and cruise proportions change significantly across mission lengths.',
-    },
-  ],
-  metadata: {
-    model: 'Grounded RAG Pipeline',
-    nli_model: 'cross-encoder/nli-deberta-v3-small',
-    timestamp: new Date().toISOString(),
-    processing_time_ms: 842,
-    retrieved_chunks: 5,
-    schema_version: '1.0.0',
-  },
-  query_id: 'preview-request',
-  status: 'success',
-};
-
 export default function RightPanel({ latestResponse }) {
-  const data = latestResponse || previewResponse;
-  const isPreview = !latestResponse;
+  if (!latestResponse) {
+    return (
+      <aside className="hidden h-full w-[420px] shrink-0 overflow-auto border-l border-gray-200 bg-slate-50 xl:block">
+        <div className="p-6">
+          <div className="rounded-3xl border border-dashed border-gray-300 bg-white px-5 py-6 text-sm text-gray-600 shadow-sm">
+            Submit a question to see real confidence details, evidence, explanation, and request metadata.
+          </div>
+        </div>
+      </aside>
+    );
+  }
 
-  const { confidence, citations, metadata, query_id } = data;
+  const { confidence, citations, metadata, query_id } = latestResponse;
 
   const claimSupportRate = safeRate(
     confidence?.signals?.grounding_supported,
@@ -194,12 +149,6 @@ export default function RightPanel({ latestResponse }) {
   return (
     <aside className="hidden h-full w-[420px] shrink-0 overflow-auto border-l border-gray-200 bg-slate-50 xl:block">
       <div className="space-y-5 p-6">
-        {isPreview ? (
-          <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-600">
-            Preview mode: this is the intended confidence and evidence layout until the backend response is live.
-          </div>
-        ) : null}
-
         <PanelSection title="Confidence summary" defaultOpen>
           <div className="flex items-start justify-between gap-3">
             <div>
