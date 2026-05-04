@@ -27,7 +27,7 @@ export const metricsService = {
 };
 
 export const queryService = {
-  submit: (request: { query: string; top_k?: number }) =>
+  submit: (request: { query: string; top_k?: number; session_id?: string }) =>
     apiClient.post('/api/v1/query', request) as Promise<GroundCheckResponse>,
 };
 

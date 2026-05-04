@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 
+import { useEffect, useMemo, useState } from 'react';
 import {
   BarChart3,
   Brain,
@@ -10,12 +11,59 @@ import {
   Sparkles,
 } from 'lucide-react';
 import {
-  placeholderRecentResponses,
-  placeholderSummary,
-} from '@/data/analyticsPlaceholders';
+  QUERY_HISTORY_UPDATED_EVENT,
+  readSavedQueryHistory,
+} from '@/services/queryHistory';
 
 function formatPercent(value) {
+  if (value == null || Number.isNaN(value)) return '—';
   return `${Math.round(value * 100)}%`;
+}
+
+function formatScore(value) {
+  if (value == null || Number.isNaN(value)) return '—';
+  return `${Math.round(value)}/100`;
+}
+
+function formatLatency(value) {
+  if (value == null || Number.isNaN(value)) return '—';
+  return `${Math.round(value)} ms`;
+}
+
+function formatTimestamp(timestamp) {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return 'Recently';
+
+  return parsed.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function normalizePreviewText(value) {
+  return String(value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/^\s*[*-]\s+/gm, '- ')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/(^|[^\w*])\*([^*\n]+)\*(?=[^\w*]|$)/g, '$1$2')
+    .replace(/(^|[^\w_])_([^_\n]+)_(?=[^\w_]|$)/g, '$1$2')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\n{2,}EVIDENCE USED[\s\S]*$/i, '')
+    .replace(/\n+/g, ' ')
+    .trim();
+}
+
+function average(values) {
+  const filtered = values.filter((value) => value != null && !Number.isNaN(value));
+  if (!filtered.length) return null;
+
+  return filtered.reduce((sum, value) => sum + value, 0) / filtered.length;
 }
 
 function StatCard({ icon: Icon, label, value, helper }) {
@@ -95,52 +143,103 @@ function RecentResponses({ items }) {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Recent queries and responses</h2>
           <p className="mt-1 text-sm text-gray-600">
-            Sample recent-response view showing the intended analytics presentation.
+            Most recent saved responses from this browser workspace.
           </p>
         </div>
       </div>
 
-      <div className="mt-6 space-y-4">
-        {items.map((item) => (
-          <article key={item.id} className="rounded-2xl border border-gray-200 p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-semibold text-gray-900">{item.query}</div>
-                <div className="mt-1 text-xs text-gray-500">{item.timestampLabel}</div>
+      {items.length ? (
+        <div className="mt-6 space-y-4">
+          {items.map((item) => (
+            <article key={item.id} className="rounded-2xl border border-gray-200 p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-gray-900">{item.query}</div>
+                  <div className="mt-1 text-xs text-gray-500">{item.timestampLabel}</div>
+                </div>
+
+                <div
+                  className={[
+                    'rounded-full border px-3 py-1 text-xs font-medium',
+                    tierTone(item.tier),
+                  ].join(' ')}
+                >
+                  {item.tier} · {item.confidence}/100
+                </div>
               </div>
 
-              <div
-                className={[
-                  'rounded-full border px-3 py-1 text-xs font-medium',
-                  tierTone(item.tier),
-                ].join(' ')}
-              >
-                {item.tier} · {item.confidence}/100
+              <p className="mt-4 text-sm leading-6 text-gray-700">{item.answer}</p>
+
+              <div className="mt-4 flex flex-wrap gap-2 text-xs text-gray-600">
+                <span className="rounded-full bg-gray-100 px-3 py-1">
+                  Grounding {formatPercent(item.grounding)}
+                </span>
+                <span className="rounded-full bg-gray-100 px-3 py-1">
+                  Generation {formatPercent(item.generation)}
+                </span>
+                <span className="rounded-full bg-gray-100 px-3 py-1">
+                  Latency {item.latencyMs} ms
+                </span>
               </div>
-            </div>
-
-            <p className="mt-4 text-sm leading-6 text-gray-700">{item.answer}</p>
-
-            <div className="mt-4 flex flex-wrap gap-2 text-xs text-gray-600">
-              <span className="rounded-full bg-gray-100 px-3 py-1">
-                Grounding {formatPercent(item.grounding)}
-              </span>
-              <span className="rounded-full bg-gray-100 px-3 py-1">
-                Generation {formatPercent(item.generation)}
-              </span>
-              <span className="rounded-full bg-gray-100 px-3 py-1">
-                Latency {item.latencyMs} ms
-              </span>
-            </div>
-          </article>
-        ))}
-      </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-6 rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-5 py-6 text-sm text-gray-600">
+          No saved responses yet. Submit a few successful chats and the recent-response panel
+          will populate automatically.
+        </div>
+      )}
     </section>
   );
 }
 
 export default function Analytics() {
-  const totalQueries = placeholderSummary.totalQueries;
+  const [savedHistory, setSavedHistory] = useState(() => readSavedQueryHistory());
+
+  useEffect(() => {
+    const refreshHistory = () => {
+      setSavedHistory(readSavedQueryHistory());
+    };
+
+    refreshHistory();
+    window.addEventListener(QUERY_HISTORY_UPDATED_EVENT, refreshHistory);
+
+    return () => {
+      window.removeEventListener(QUERY_HISTORY_UPDATED_EVENT, refreshHistory);
+    };
+  }, []);
+
+  const analytics = useMemo(() => {
+    const totalQueries = savedHistory.length;
+    const tierCounts = {
+      HIGH: savedHistory.filter((item) => item.confidence.tier === 'HIGH').length,
+      MEDIUM: savedHistory.filter((item) => item.confidence.tier === 'MEDIUM').length,
+      LOW: savedHistory.filter((item) => item.confidence.tier === 'LOW').length,
+    };
+
+    return {
+      totalQueries,
+      averageConfidence: average(savedHistory.map((item) => item.confidence.finalScore)),
+      averageGrounding: average(savedHistory.map((item) => item.confidence.groundingScore)),
+      averageGeneration: average(
+        savedHistory.map((item) => item.confidence.generationConfidence),
+      ),
+      averageLatencyMs: average(savedHistory.map((item) => item.metadata.processingTimeMs)),
+      tierCounts,
+      recentResponses: savedHistory.slice(0, 6).map((item) => ({
+        id: item.queryId,
+        query: item.query,
+        timestampLabel: formatTimestamp(item.timestamp),
+        tier: item.confidence.tier ?? 'MEDIUM',
+        confidence: item.confidence.finalScore ?? 0,
+        grounding: item.confidence.groundingScore ?? 0,
+        generation: item.confidence.generationConfidence ?? 0,
+        latencyMs: item.metadata.processingTimeMs ?? 0,
+        answer: normalizePreviewText(item.answer) || 'No answer saved for this query.',
+      })),
+    };
+  }, [savedHistory]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white">
@@ -153,17 +252,17 @@ export default function Analytics() {
                   Analytics
                 </p>
                 <h2 className="mt-3 text-3xl font-semibold text-gray-900">
-                  Confidence analytics preview
+                  Confidence analytics
                 </h2>
                 <p className="mt-3 max-w-3xl text-base leading-7 text-gray-600">
-                  This page shows the intended analytics layout using placeholder response data.
-                  Live reporting can replace these sample values later without changing the page
-                  structure.
+                  This page summarizes saved response history from this workspace. As successful
+                  chats are stored locally, these metrics and recent responses will update without
+                  changing the page structure.
                 </p>
               </div>
 
               <div className="rounded-2xl border border-gray-200 bg-gray-50 px-5 py-4 text-sm text-gray-700">
-                Placeholder sample dataset
+                {analytics.totalQueries ? `${analytics.totalQueries} saved responses` : 'No data yet'}
               </div>
             </div>
           </div>
@@ -172,48 +271,49 @@ export default function Analytics() {
             <StatCard
               icon={CheckCircle2}
               label="Total saved queries"
-              value={`${placeholderSummary.totalQueries}`}
-              helper="Example volume of saved responses in the workspace."
+              value={`${analytics.totalQueries}`}
+              helper="Successful responses saved in local workspace history."
             />
             <StatCard
               icon={Gauge}
               label="Average confidence"
-              value={`${placeholderSummary.averageConfidence}/100`}
-              helper="Average fused confidence score across the sample set."
+              value={formatScore(analytics.averageConfidence)}
+              helper="Average fused confidence score across saved responses."
             />
             <StatCard
               icon={ShieldCheck}
               label="Average grounding"
-              value={formatPercent(placeholderSummary.averageGrounding)}
+              value={formatPercent(analytics.averageGrounding)}
               helper="Average evidence-grounding support score."
             />
             <StatCard
               icon={Brain}
               label="Average generation"
-              value={formatPercent(placeholderSummary.averageGeneration)}
+              value={formatPercent(analytics.averageGeneration)}
               helper="Average normalized model-side confidence signal."
             />
             <StatCard
               icon={Sparkles}
               label="Average latency"
-              value={`${placeholderSummary.averageLatencyMs} ms`}
-              helper="Average end-to-end response latency in the sample set."
+              value={formatLatency(analytics.averageLatencyMs)}
+              helper="Average end-to-end response latency."
             />
           </div>
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
-            <TierDistribution counts={placeholderSummary.tierCounts} total={totalQueries} />
-            <RecentResponses items={placeholderRecentResponses} />
+            <TierDistribution counts={analytics.tierCounts} total={analytics.totalQueries} />
+            <RecentResponses items={analytics.recentResponses} />
           </div>
 
           <div className="rounded-3xl border border-dashed border-gray-300 bg-gray-50 px-6 py-5 text-sm text-gray-600 shadow-sm">
             <div className="flex items-center gap-2 font-medium text-gray-700">
               <BarChart3 className="h-4 w-4" />
-              Placeholder note
+              Data source
             </div>
             <p className="mt-2 leading-6">
-              These values are intentionally static. Replace the sample dataset with saved query
-              history or backend analytics later when you are ready to wire real data.
+              Analytics currently read from the same saved query history used by this browser
+              workspace. If you later move to backend-backed reporting, the page can keep this
+              structure and swap only the data source.
             </p>
           </div>
         </div>

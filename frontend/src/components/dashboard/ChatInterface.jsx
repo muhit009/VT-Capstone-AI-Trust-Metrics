@@ -7,6 +7,8 @@ import {
   AlertCircle,
   RotateCcw,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import FeedbackWidget from '../common/FeedbackWidget';
 
 const tierStyles = {
@@ -34,6 +36,53 @@ function SourcePill({ citation, rank }) {
       {citation.page ? (
         <span className="text-gray-500">p.{citation.page}</span>
       ) : null}
+    </div>
+  );
+}
+
+function MarkdownAnswer({ content }) {
+  return (
+    <div className="mt-4 text-[15px] leading-7 text-gray-800">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
+          strong: ({ children }) => <strong className="font-semibold text-gray-900">{children}</strong>,
+          em: ({ children }) => <em className="italic">{children}</em>,
+          blockquote: ({ children }) => (
+            <blockquote className="mb-4 border-l-4 border-gray-300 pl-4 italic text-gray-700 last:mb-0">
+              {children}
+            </blockquote>
+          ),
+          ul: ({ children }) => <ul className="mb-4 list-disc space-y-2 pl-6 last:mb-0">{children}</ul>,
+          ol: ({ children }) => (
+            <ol className="mb-4 list-decimal space-y-2 pl-6 last:mb-0">{children}</ol>
+          ),
+          li: ({ children }) => <li>{children}</li>,
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary-700 underline decoration-primary-300 underline-offset-2 hover:text-primary-800"
+            >
+              {children}
+            </a>
+          ),
+          code: ({ inline, children }) =>
+            inline ? (
+              <code className="rounded bg-gray-100 px-1.5 py-0.5 text-[13px] text-gray-900">
+                {children}
+              </code>
+            ) : (
+              <code className="block overflow-x-auto rounded-2xl bg-gray-950 px-4 py-3 text-[13px] text-gray-100">
+                {children}
+              </code>
+            ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }
@@ -75,9 +124,7 @@ function AssistantMessage({ message, onCopy }) {
           </div>
         </div>
 
-        <div className="mt-4 whitespace-pre-wrap text-[15px] leading-7 text-gray-800">
-          {message.content}
-        </div>
+        <MarkdownAnswer content={message.content} />
 
         {response ? (
           <>

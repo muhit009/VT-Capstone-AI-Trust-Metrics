@@ -11,9 +11,10 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import boeingLogo from '@/assets/boeinglogo.png';
 import {
-  QUERY_HISTORY_UPDATED_EVENT,
-  readSavedQueryHistory,
-} from '@/services/queryHistory';
+  CHAT_SESSIONS_UPDATED_EVENT,
+  createChatSessionId,
+  readChatSessions,
+} from '@/services/chatSessions';
 
 const navItems = [
   { id: 'chat', label: 'Chat', icon: MessageSquare, to: '/dashboard/chat' },
@@ -44,30 +45,31 @@ function formatRelativeTime(timestamp) {
 
 function toConversationItems(history) {
   return history.map((entry) => ({
-    id: entry.queryId,
-    title: entry.query,
-    time: formatRelativeTime(entry.timestamp),
+    id: entry.id,
+    title: entry.title,
+    time: formatRelativeTime(entry.updatedAt),
   }));
 }
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [savedConversations, setSavedConversations] = useState(() =>
-    toConversationItems(readSavedQueryHistory()),
+    toConversationItems(readChatSessions()),
   );
   const location = useLocation();
   const navigate = useNavigate();
+  const activeSessionId = new URLSearchParams(location.search).get('session');
 
   useEffect(() => {
     const refreshHistory = () => {
-      setSavedConversations(toConversationItems(readSavedQueryHistory()));
+      setSavedConversations(toConversationItems(readChatSessions()));
     };
 
     refreshHistory();
-    window.addEventListener(QUERY_HISTORY_UPDATED_EVENT, refreshHistory);
+    window.addEventListener(CHAT_SESSIONS_UPDATED_EVENT, refreshHistory);
 
     return () => {
-      window.removeEventListener(QUERY_HISTORY_UPDATED_EVENT, refreshHistory);
+      window.removeEventListener(CHAT_SESSIONS_UPDATED_EVENT, refreshHistory);
     };
   }, []);
 
@@ -134,7 +136,7 @@ export default function Sidebar() {
       <div className="p-4">
         <button
           type="button"
-          onClick={() => navigate('/dashboard/chat')}
+          onClick={() => navigate(`/dashboard/chat?session=${createChatSessionId()}`)}
           className={[
             'flex items-center justify-center gap-2 rounded-xl bg-primary-600 text-sm font-medium text-white hover:bg-primary-700',
             collapsed ? 'h-16 w-full' : 'w-full px-4 py-3',
@@ -184,13 +186,30 @@ export default function Sidebar() {
                 <button
                   key={conversation.id}
                   type="button"
-                  onClick={() => navigate('/dashboard/chat')}
-                  className="w-full rounded-xl px-3 py-3 text-left hover:bg-gray-50"
+                  onClick={() => navigate(`/dashboard/chat?session=${conversation.id}`)}
+                  className={[
+                    'w-full rounded-xl px-3 py-3 text-left',
+                    activeSessionId === conversation.id
+                      ? 'bg-primary-50 text-primary-700'
+                      : 'hover:bg-gray-50',
+                  ].join(' ')}
                 >
-                  <div className="truncate text-sm font-medium text-gray-800">
+                  <div
+                    className={[
+                      'truncate text-sm font-medium',
+                      activeSessionId === conversation.id ? 'text-primary-800' : 'text-gray-800',
+                    ].join(' ')}
+                  >
                     {conversation.title}
                   </div>
-                  <div className="mt-1 text-xs text-gray-500">{conversation.time}</div>
+                  <div
+                    className={[
+                      'mt-1 text-xs',
+                      activeSessionId === conversation.id ? 'text-primary-600' : 'text-gray-500',
+                    ].join(' ')}
+                  >
+                    {conversation.time}
+                  </div>
                 </button>
               ))}
             </div>
