@@ -4,6 +4,17 @@ import { useMemo, useState } from 'react';
 import { RotateCcw, Save, ShieldCheck, User } from 'lucide-react';
 import WeightConfiguration from './WeightConfiguration';
 
+const STORAGE_KEY = 'user_profile';
+
+const [settings, setSettings] = useState(() => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : defaultSettings;
+  } catch {
+    return defaultSettings;
+  }
+});
+
 const defaultSettings = {
   user: {
     displayName: 'Boeing New Hire',
@@ -101,11 +112,17 @@ export default function SettingsPanel() {
 
   const handleResetDefaults = () => {
     setSettings(defaultSettings);
+    localStorage.removeItem(STORAGE_KEY);
     setSaveNotice('Profile settings reset to defaults.');
   };
 
   const handleSave = () => {
-    setSaveNotice('Profile settings saved locally in UI state.');
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      setSaveNotice('Profile settings saved.');
+    } catch {
+      setSaveNotice('Failed to save settings.');
+    }
   };
 
   const userSummary = useMemo(

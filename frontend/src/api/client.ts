@@ -4,7 +4,7 @@ import { ApiError } from './errors';
 // ── Axios instance ────────────────────────────────────────────────────────────
 
 export const apiClient = axios.create({
-  baseURL: '',
+  baseURL: import.meta.env.VITE_API_BASE_URL ?? '',
   headers: { 'Content-Type': 'application/json' },
   timeout: 180000, // 3 minutes — Ollama can take 60-90s on first query
 });
