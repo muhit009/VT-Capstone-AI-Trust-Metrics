@@ -1,7 +1,17 @@
 {
+  "headers": [
+    {
+      "source": "/v1/:path*",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
+    {
+      "source": "/api/:path*",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    }
+  ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "http://groundcheck-alb-2146650864.us-east-1.elb.amazonaws.com/api/:path*" },
-    { "source": "/v1/:path*",  "destination": "http://groundcheck-alb-2146650864.us-east-1.elb.amazonaws.com/v1/:path*"  },
-    { "source": "/(.*)",       "destination": "/index.html"                                                               }
+    { "source": "/v1/:path*",  "destination": "http://groundcheck-alb-2146650864.us-east-1.elb.amazonaws.com/v1/:path*" },
+    { "source": "/(.*)",       "destination": "/index.html" }
   ]
 }
