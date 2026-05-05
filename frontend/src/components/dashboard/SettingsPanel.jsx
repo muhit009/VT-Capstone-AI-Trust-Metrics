@@ -6,15 +6,6 @@ import WeightConfiguration from './WeightConfiguration';
 
 const STORAGE_KEY = 'user_profile';
 
-const [settings, setSettings] = useState(() => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : defaultSettings;
-  } catch {
-    return defaultSettings;
-  }
-});
-
 const defaultSettings = {
   user: {
     displayName: 'Boeing New Hire',
@@ -80,7 +71,16 @@ function Select(props) {
 }
 
 export default function SettingsPanel() {
-  const [settings, setSettings] = useState(defaultSettings);
+
+  const [settings, setSettings] = useState(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      return stored ? JSON.parse(stored) : defaultSettings;
+    } catch {
+      return defaultSettings;
+    }
+  });
+
   const [saveNotice, setSaveNotice] = useState('');
 
   const updateSection = (section, field, value) => {
