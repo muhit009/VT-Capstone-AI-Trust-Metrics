@@ -2,10 +2,12 @@
   "version": 2,
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
-  "installCommand": "echo 'install handled in buildCommand'",
+  "installCommand": "echo skip",
   "framework": null,
-  "rewrites": [
-    { "source": "/v1/:path*", "destination": "/api/backend-v1/:path*" },
-    { "source": "/(.*)",      "destination": "/index.html" }
+  "routes": [
+    { "src": "/v1/(.*)", "dest": "/api/backend-v1/$1" },
+    { "src": "/api/v1/(.*)", "dest": "/api/v1/$1" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
