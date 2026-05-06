@@ -5,9 +5,9 @@
   "installCommand": "echo skip",
   "framework": null,
   "routes": [
-    { "src": "/v1/(.*)", "dest": "/api/backend-v1/$1" },
-    { "src": "/api/v1/(.*)", "dest": "/api/v1/$1" },
+    { "src": "/v1/(.*)",     "dest": "/api/proxy?_prefix=/v1&_path=$1" },
+    { "src": "/api/v1/(.*)", "dest": "/api/proxy?_prefix=/api/v1&_path=$1" },
     { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
+    { "src": "/(.*)",        "dest": "/index.html" }
   ]
 }
