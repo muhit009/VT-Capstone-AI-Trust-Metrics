@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "echo 'install handled in buildCommand'",
+  "framework": null,
+  "rewrites": [
+    { "source": "/v1/:path*", "destination": "/api/backend-v1/:path*" },
+    { "source": "/(.*)",      "destination": "/index.html" }
+  ]
+}
