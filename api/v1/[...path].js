@@ -1,17 +1,6 @@
-export const config = { api: { bodyParser: false } };
+module.exports = async function handler(req, res) {
+  const ALB = 'http://groundcheck-alb-2146650864.us-east-1.elb.amazonaws.com';
 
-const ALB = 'http://groundcheck-alb-2146650864.us-east-1.elb.amazonaws.com';
-
-function collectBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on('data', (chunk) => chunks.push(chunk));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
-}
-
-export default async function handler(req, res) {
   const { path = [] } = req.query;
   const segments = Array.isArray(path) ? path : [path];
   const pathStr = segments.join('/');
@@ -28,7 +17,13 @@ export default async function handler(req, res) {
   const fetchOpts = { method: req.method, headers };
 
   if (!['GET', 'HEAD', 'DELETE'].includes(req.method.toUpperCase())) {
-    fetchOpts.body = await collectBody(req);
+    const chunks = [];
+    await new Promise((resolve, reject) => {
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', resolve);
+      req.on('error', reject);
+    });
+    fetchOpts.body = Buffer.concat(chunks);
   }
 
   const upstream = await fetch(targetUrl, fetchOpts);
@@ -39,4 +34,6 @@ export default async function handler(req, res) {
   });
 
   res.send(Buffer.from(await upstream.arrayBuffer()));
-}
+};
+
+module.exports.config = { api: { bodyParser: false } };
