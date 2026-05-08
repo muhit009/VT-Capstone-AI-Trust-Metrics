@@ -1021,9 +1021,7 @@ VITE_API_BASE_URL=https://api.your-domain.com/api npm run build
 
 ---
 
-### 7.3 OpenAPI / Production (chat)
-
-### 7.3 Production (chat / NVIDIA NIM)
+### 7.3 Production v.2 (chat / NVIDIA NIM + AWS ECR)
 
 This setup uses `PIPELINE=chat`, routing all LLM generation calls to NVIDIA NIM via an OpenAI-compatible HTTP client. Deployment is fully automated via GitHub Actions on every push to `main` — no local model server required.
 
