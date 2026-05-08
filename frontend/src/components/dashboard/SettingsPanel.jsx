@@ -94,12 +94,20 @@ export default function SettingsPanel() {
     setSaveNotice('');
   };
 
-  const handleAircraftFocusChange = (value) => {
-    const list = value
+  const [aircraftRaw, setAircraftRaw] = useState(
+    settings.user.aircraftFocus.join(', ')
+  );
+
+  const handleAircraftRawChange = (value) => {
+    setAircraftRaw(value);
+    setSaveNotice('');
+  };
+
+  const handleAircraftBlur = () => {
+    const list = aircraftRaw       // parse only when focus leaves
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean);
-
     setSettings((current) => ({
       ...current,
       user: {
@@ -107,7 +115,7 @@ export default function SettingsPanel() {
         aircraftFocus: list,
       },
     }));
-    setSaveNotice('');
+    setAircraftRaw(list.join(', ')); // normalise spacing on exit
   };
 
   const handleResetDefaults = () => {
@@ -240,8 +248,9 @@ export default function SettingsPanel() {
                 hint="Comma-separated values for shortcuts, search defaults, and onboarding recommendations."
               >
                 <Input
-                  value={settings.user.aircraftFocus.join(', ')}
-                  onChange={(e) => handleAircraftFocusChange(e.target.value)}
+                  value={aircraftRaw}
+                  onChange={(e) => handleAircraftRawChange(e.target.value)}
+                  onBlur={handleAircraftBlur}
                   placeholder="737, 787, 777X"
                 />
               </Field>
