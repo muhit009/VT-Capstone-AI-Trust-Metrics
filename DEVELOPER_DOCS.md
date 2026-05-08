@@ -1021,7 +1021,72 @@ VITE_API_BASE_URL=https://api.your-domain.com/api npm run build
 
 ---
 
-### 7.3 Environment Variables
+### 7.3 OpenAPI / Production (chat)
+
+### 7.3 Production (chat / NVIDIA NIM)
+
+This setup uses `PIPELINE=chat`, routing all LLM generation calls to NVIDIA NIM via an OpenAI-compatible HTTP client. Deployment is fully automated via GitHub Actions on every push to `main` — no local model server required.
+
+**Required GitHub Actions secrets**
+
+| Secret | Description |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | IAM user access key with ECR push and ECS deploy permissions |
+| `AWS_SECRET_ACCESS_KEY` | Corresponding IAM secret key |
+| `CHAT_API_KEY` | NVIDIA NIM API key — never committed to the repository |
+
+**CI/CD pipeline (`.github/workflows/ci.yml`)**
+
+The pipeline runs three sequential jobs:
+
+```
+push to main
+    │
+    ▼
+[1] test   — pytest tests/ -v  (PIPELINE=ollama, stub DB)
+    │
+    ▼
+[2] build  — docker build ./backend
+             docker push ECR groundcheck-backend:{sha}
+             docker push ECR groundcheck-backend:latest
+    │
+    ▼
+[3] deploy — aws ecs update-service
+               --cluster default
+               --service groundcheck-backend
+               --force-new-deployment
+```
+
+Build and deploy jobs only trigger on pushes to `main`, not on pull requests.
+
+**ECS task definition environment variables**
+
+```bash
+PIPELINE=chat
+CHAT_API_KEY=nvapi-...                            # from GitHub Actions secret
+CHAT_BASE_URL=https://integrate.api.nvidia.com/v1
+CHAT_MODEL=mistralai/mistral-medium-3.5-128b
+DB_IP=db.xxxx.supabase.co
+DB_PORT=5432
+DB_NAME=postgres
+DB_USER=postgres
+DB_PASS=...
+ALLOWED_ORIGINS=https://your-app.vercel.app
+RATE_LIMIT=10/minute
+```
+
+**Frontend deploy**
+
+```bash
+cd frontend
+VITE_API_BASE_URL=https://api.your-domain.com/api npm run build
+```
+
+Serve `dist/` via Vercel, S3 + CloudFront, or any static host. The Vercel serverless proxy functions in `frontend/api/` forward requests to the ECS backend automatically.
+
+---
+
+### 7.4 Environment Variables
 
 #### Backend (`backend/.env`)
 
