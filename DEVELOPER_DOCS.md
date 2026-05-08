@@ -1061,7 +1061,7 @@ Build and deploy jobs only trigger on pushes to `main`, not on pull requests.
 
 ```bash
 PIPELINE=chat
-CHAT_API_KEY=nvapi-...                            # from GitHub Actions secret
+CHAT_API_KEY=nvapi-...                        
 CHAT_BASE_URL=https://integrate.api.nvidia.com/v1
 CHAT_MODEL=mistralai/mistral-medium-3.5-128b
 DB_IP=db.xxxx.supabase.co
